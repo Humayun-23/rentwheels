@@ -1,0 +1,27 @@
+## Web framework
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+
+## Data validation & settings
+pydantic==2.6.4
+pydantic-settings==2.2.1
+python-dotenv==1.0.1
+
+## Database & migrations (SQLAlchemy + Postgres)
+SQLAlchemy==2.0.29
+alembic==1.13.1
+psycopg2-binary==2.9.9
+
+## Auth & security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+bcrypt==4.1.2
+
+## Email validation (optional but common for user signup)
+email-validator==2.1.0.post1
+
+# Notes:
+# - If you prefer SQLite for local dev instead of Postgres, you can remove psycopg2-binary and use a SQLite URL.
+# - If you use async SQLAlchemy with Postgres, replace psycopg2-binary with asyncpg.
+# - Uvicorn[standard] includes uvloop and httptools for better performance on macOS/Linux.
