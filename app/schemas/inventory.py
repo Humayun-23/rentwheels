@@ -4,6 +4,7 @@ from datetime import datetime
 
 class BikeInventoryCreate(BaseModel):
     bike_id: int
+    shop_id: int
     total_quantity: int  # Total units of this bike
     # available_quantity and rented_quantity are auto-calculated
 

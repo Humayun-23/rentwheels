@@ -76,6 +76,7 @@ class BikeInventory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
     total_quantity = Column(Integer, nullable=False, default=1)  # Total bikes of this type
     available_quantity = Column(Integer, nullable=False, default=1)  # Available for booking
     rented_quantity = Column(Integer, nullable=False, default=0)  # Currently rented

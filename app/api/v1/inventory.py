@@ -3,16 +3,24 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import datetime
 
+from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import BikeInventory, Bike, Booking, Shop
+from app.db.models import BikeInventory, Bike, Booking, Shop, User
 from app.schemas.inventory import BikeInventoryCreate, BikeInventoryUpdate, BikeInventoryOut, InventoryAvailability
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
 @router.post("/", response_model=BikeInventoryOut, status_code=status.HTTP_201_CREATED)
-def create_inventory(inventory: BikeInventoryCreate, db: Session = Depends(get_db)):
+def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create inventory record for a bike"""
+   # Only shop owners can create inventory
+    if current_user.user_type != "shop_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only shop owners can create inventory records"
+        )
+
     # Check if bike exists
     bike = db.query(Bike).filter(Bike.id == inventory.bike_id).first()
     if not bike:
@@ -93,8 +101,14 @@ def check_availability(bike_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{bike_id}", response_model=BikeInventoryOut)
-def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate, db: Session = Depends(get_db)):
+def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update total quantity for a bike"""
+    # Only shop owners can update inventory
+    if current_user.user_type != "shop_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only shop owners can update inventory records"
+        )
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == bike_id).first()
 
     if not inventory:
