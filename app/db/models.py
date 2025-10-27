@@ -18,6 +18,8 @@ class User(Base):
 
     # Relationship: One user can own multiple shops
     shops = relationship("Shop", back_populates="owner", foreign_keys="Shop.owner_id")
+    # Relationship: One user (customer) can have multiple bookings
+    bookings = relationship("Booking", back_populates="customer", foreign_keys="Booking.customer_id")
 
 
 class Shop(Base):
@@ -52,7 +54,7 @@ class Bike(Base):
     shop_id = Column(Integer, ForeignKey("shops.id"), nullable=False, index=True)
     name = Column(String, nullable=False)
     model = Column(String, nullable=False)
-    bike_type = Column(String, nullable=False)  # "mountain", "road", "hybrid", "electric", etc.
+    bike_type = Column(String, nullable=False)
     description = Column(String, nullable=True)
     price_per_hour = Column(Integer, nullable=False)  # Price in cents
     price_per_day = Column(Integer, nullable=False)  # Price in cents
@@ -63,3 +65,40 @@ class Bike(Base):
 
     # Relationship: Many bikes belong to one shop
     shop = relationship("Shop", back_populates="bikes", foreign_keys=[shop_id])
+    bookings = relationship("Booking", back_populates="bike", cascade="all, delete-orphan")
+    inventory = relationship("BikeInventory", back_populates="bike", uselist=False, cascade="all, delete-orphan")
+
+
+class BikeInventory(Base):
+    """BikeInventory model - tracks real-time inventory for each bike"""
+    __tablename__ = "bike_inventory"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id"), nullable=False, unique=True, index=True)
+    total_quantity = Column(Integer, nullable=False, default=1)  # Total bikes of this type
+    available_quantity = Column(Integer, nullable=False, default=1)  # Available for booking
+    rented_quantity = Column(Integer, nullable=False, default=0)  # Currently rented
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship: Each inventory record belongs to one bike
+    bike = relationship("Bike", back_populates="inventory", foreign_keys=[bike_id])
+
+
+class Booking(Base):
+    """Booking model - represents bike rental bookings by customers"""
+    __tablename__ = "bookings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id"), nullable=False, index=True)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    status = Column(String, nullable=False, default="pending")  # "pending", "confirmed", "completed", "cancelled"
+    total_price = Column(Integer, nullable=True)  # Price in cents
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    customer = relationship("User", back_populates="bookings", foreign_keys=[customer_id])
+    bike = relationship("Bike", back_populates="bookings", foreign_keys=[bike_id])

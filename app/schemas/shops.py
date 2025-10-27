@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime, time
 from typing import Optional
 from pydantic.types import conint
@@ -6,7 +6,6 @@ from pydantic.types import conint
 class ShopCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    owner_id: int 
     phone_number: conint(gt=0)
     address: str
     city: str
@@ -15,6 +14,7 @@ class ShopCreate(BaseModel):
     opening_time: Optional[time] = None
     closing_time: Optional[time] = None
     is_active: bool = True
+    # Note: owner_id is automatically set from the authenticated user in the endpoint
 
 
 class Shop(ShopCreate):

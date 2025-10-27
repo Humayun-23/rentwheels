@@ -8,7 +8,6 @@ class UserCreate(BaseModel):
     password: str
     phone_number: conint(gt=0)
     user_type: Literal["customer", "shop_owner"]
-    shop: Optional[str] = None 
 
 
 class User(UserCreate):
@@ -25,7 +24,6 @@ class UserLogin(BaseModel):
 
 class UserUpdate(BaseModel):
     phone_number: Optional[conint(gt=0)] = None
-    shop: Optional[str] = None
     
 class UserOut(User):
     pass
