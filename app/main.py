@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.database import engine, Base
 from app.db import models
-from app.api.v1 import auth, users, shops, booking, listing
+from app.api.v1 import auth, users, shops, booking, listing, searchvehicle
 from app.api.v1 import inventory
 
 # Create database tables
@@ -30,6 +30,7 @@ app.include_router(shops.router, prefix="/api/v1")
 app.include_router(booking.router, prefix="/api/v1")
 app.include_router(listing.router, prefix="/api/v1")
 app.include_router(inventory.router, prefix="/api/v1")
+app.include_router(searchvehicle.router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -46,8 +47,3 @@ def read_root():
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)

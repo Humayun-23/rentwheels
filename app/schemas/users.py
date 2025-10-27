@@ -1,12 +1,12 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, Literal
-from pydantic.types import conint
+
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
-    phone_number: conint(gt=0)
+    phone_number: str = Field(..., min_length=10, max_length=20)  # Accept phone as string
     user_type: Literal["customer", "shop_owner"]
 
 
@@ -23,7 +23,13 @@ class UserLogin(BaseModel):
     password: str
 
 class UserUpdate(BaseModel):
-    phone_number: Optional[conint(gt=0)] = None
+    phone_number: Optional[str] = Field(None, min_length=10, max_length=20)
     
-class UserOut(User):
-    pass
+class UserOut(BaseModel):
+    email: EmailStr
+    phone_number: str
+    user_type: Literal["customer", "shop_owner"]
+    id: int
+    created_at: datetime
+    updated_at: datetime
+    

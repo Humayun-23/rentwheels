@@ -6,22 +6,10 @@ from typing import List
 
 from app.db.database import get_db
 from app.db.models import User
-from app.schemas.users import UserCreate, UserUpdate, UserOut, UserLogin
-
-# Password hashing configuration
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.schemas.users import UserCreate, UserUpdate, UserOut
+from app.utils import utils
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-
-def hash_password(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a hash"""
-    return pwd_context.verify(plain_password, hashed_password)
 
 
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -36,10 +24,10 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
                 detail="Email already registered"
             )
 
-        # Hash the password
-        hashed_password = hash_password(user.password)
+        # Hash the password (handles long passwords automatically)
+        hashed_password = utils.hash_password(user.password)
 
-        # Create new user
+        # Create new user with hashed password
         db_user = User(
             email=user.email,
             password=hashed_password,
@@ -95,8 +83,6 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
     # Update only provided fields
     if user_update.phone_number is not None:
         user.phone_number = user_update.phone_number
-    if user_update.shop is not None:
-        user.shop = user_update.shop
 
     try:
         db.commit()
@@ -108,10 +94,3 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating user: {str(e)}"
         )
-
-
-@router.get("/", response_model=List[UserOut])
-def get_all_users(db: Session = Depends(get_db)):
-    """Get all users (admin endpoint)"""
-    users = db.query(User).all()
-    return users

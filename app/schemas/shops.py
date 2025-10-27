@@ -1,12 +1,12 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, EmailStr, ConfigDict, Field
 from datetime import datetime, time
 from typing import Optional
-from pydantic.types import conint
+
 
 class ShopCreate(BaseModel):
     name: str
     description: Optional[str] = None
-    phone_number: conint(gt=0)
+    phone_number: str = Field(..., min_length=10, max_length=20)
     address: str
     city: str
     state: Optional[str] = None
@@ -28,7 +28,7 @@ class Shop(ShopCreate):
 class ShopUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    phone_number: Optional[conint(gt=0)] = None
+    phone_number: Optional[str] = Field(None, min_length=10, max_length=20)
     address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None

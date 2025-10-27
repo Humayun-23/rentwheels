@@ -11,7 +11,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
-    phone_number = Column(Integer, nullable=False)
+    phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
     user_type = Column(String, nullable=False)  # "customer" or "shop_owner"
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -29,8 +29,8 @@ class Shop(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     description = Column(String, nullable=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    phone_number = Column(Integer, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
     address = Column(String, nullable=False)
     city = Column(String, nullable=False)
     state = Column(String, nullable=True)
@@ -51,10 +51,11 @@ class Bike(Base):
     __tablename__ = "bikes"
 
     id = Column(Integer, primary_key=True, index=True)
-    shop_id = Column(Integer, ForeignKey("shops.id"), nullable=False, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
     name = Column(String, nullable=False)
     model = Column(String, nullable=False)
-    bike_type = Column(String, nullable=False)
+    bike_type = Column(String, nullable=False)  # "scooty", "bike", "car", etc.
+    engine_cc = Column(Integer, nullable=True)  # Engine displacement in CC (e.g., 150, 250, 500)
     description = Column(String, nullable=True)
     price_per_hour = Column(Integer, nullable=False)  # Price in cents
     price_per_day = Column(Integer, nullable=False)  # Price in cents
@@ -74,7 +75,7 @@ class BikeInventory(Base):
     __tablename__ = "bike_inventory"
 
     id = Column(Integer, primary_key=True, index=True)
-    bike_id = Column(Integer, ForeignKey("bikes.id"), nullable=False, unique=True, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     total_quantity = Column(Integer, nullable=False, default=1)  # Total bikes of this type
     available_quantity = Column(Integer, nullable=False, default=1)  # Available for booking
     rented_quantity = Column(Integer, nullable=False, default=0)  # Currently rented
@@ -90,8 +91,8 @@ class Booking(Base):
     __tablename__ = "bookings"
 
     id = Column(Integer, primary_key=True, index=True)
-    customer_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    bike_id = Column(Integer, ForeignKey("bikes.id"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, index=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     status = Column(String, nullable=False, default="pending")  # "pending", "confirmed", "completed", "cancelled"
