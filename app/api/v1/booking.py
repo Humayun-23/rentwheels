@@ -200,7 +200,9 @@ def confirm_booking(booking_id: int, current_user: User = Depends(get_current_us
             detail=f"Cannot confirm booking with status '{booking.status}'. Only pending bookings can be confirmed."
         )
     
+    
     booking.status = "confirmed"
+    booking.confirmed_at = datetime.utcnow()
     db.commit()
     db.refresh(booking)
     return booking
@@ -252,6 +254,55 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
         inventory.rented_quantity -= 1
     
     booking.status = "cancelled"
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+@router.post("/{booking_id}/complete", response_model=BookingOut)
+def complete_booking(booking_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Mark a booking as completed (shop owners only)"""
+    if current_user.user_type != "shop_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only shop owners can complete bookings"
+        )
+    
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Booking with ID {booking_id} not found"
+        )
+    
+    # Verify that the current user owns the shop that owns the bike
+    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+    if not bike:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bike not found"
+        )
+    
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only complete bookings for bikes in your shop"
+        )
+    
+    # Only confirmed bookings can be completed
+    if booking.status != "confirmed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot complete booking with status '{booking.status}'. Only confirmed bookings can be completed."
+        )
+    # Return inventory when booking is completed
+    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
+    if inventory:
+        inventory.available_quantity += 1
+        inventory.rented_quantity -= 1
+    booking.status = "completed"
+    booking.completed_at = datetime.utcnow()
     db.commit()
     db.refresh(booking)
     return booking
