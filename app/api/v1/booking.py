@@ -1,15 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+from app.main import app
 from app.db.database import get_db
-from app.db.models import Booking, Bike, BikeInventory, User
+from app.db.models import Booking, Bike, BikeInventory, User, Shop
 from app.schemas.booking import BookingCreate, BookingUpdate, BookingOut
 from app.api.v1.oauth2 import get_current_user
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
 @router.post("/", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def homepage(request: Request):
+    return PlainTextResponse("test")
 def create_booking(booking: BookingCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create a new booking (customers only)"""
     if current_user.user_type != "customer":
@@ -33,9 +47,15 @@ def create_booking(booking: BookingCreate, current_user: User = Depends(get_curr
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Bike is not available for booking"
         )
+    #checking if the same bike is already booked for the requested time range
+    overlapping_booking = db.query(Booking).filter(
+        Booking.bike_id == booking.bike_id,
+        Booking.status.in_(["pending", "confirmed"]),
+        Booking.start_time < booking.end_time,
+        Booking.end_time > booking.start_time
+    ).first()
 
-    # Create booking
-    if booking.start_time >= booking.end_time:
+    if overlapping_booking:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid booking time range"
@@ -139,3 +159,99 @@ def cancel_booking(booking_id: int, current_user: User = Depends(get_current_use
     
     db.delete(booking)
     db.commit()
+
+
+@router.post("/{booking_id}/confirm", response_model=BookingOut)
+def confirm_booking(booking_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Confirm a pending booking (shop owners only)"""
+    if current_user.user_type != "shop_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only shop owners can confirm bookings"
+        )
+    
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Booking with ID {booking_id} not found"
+        )
+    
+    # Verify that the current user owns the shop that owns the bike
+    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+    if not bike:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bike not found"
+        )
+    
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only confirm bookings for bikes in your shop"
+        )
+    
+    # Only pending bookings can be confirmed
+    if booking.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot confirm booking with status '{booking.status}'. Only pending bookings can be confirmed."
+        )
+    
+    booking.status = "confirmed"
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+
+@router.post("/{booking_id}/reject", response_model=BookingOut)
+def reject_booking(booking_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Reject a pending booking (shop owners only)"""
+    if current_user.user_type != "shop_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only shop owners can reject bookings"
+        )
+    
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Booking with ID {booking_id} not found"
+        )
+    
+    # Verify that the current user owns the shop that owns the bike
+    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+    if not bike:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bike not found"
+        )
+    
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only reject bookings for bikes in your shop"
+        )
+    
+    # Only pending bookings can be rejected
+    if booking.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot reject booking with status '{booking.status}'. Only pending bookings can be rejected."
+        )
+    
+    # Return inventory when booking is rejected
+    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
+    if inventory:
+        inventory.available_quantity += 1
+        inventory.rented_quantity -= 1
+    
+    booking.status = "cancelled"
+    db.commit()
+    db.refresh(booking)
+    return booking

@@ -21,6 +21,15 @@ bcrypt==4.2.0
 ## Email validation (optional but common for user signup)
 email-validator==2.1.0.post1
 
+##rate limiting
+slowapi==0.1.5
+
+##logging
+structlog==23.2.0
+
+##dev help
+better-exceptions==0.3.3
+
 # Notes:
 # - If you prefer SQLite for local dev instead of Postgres, you can remove psycopg2-binary and use a SQLite URL.
 # - If you use async SQLAlchemy with Postgres, replace psycopg2-binary with asyncpg.
