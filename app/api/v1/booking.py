@@ -54,8 +54,13 @@ def create_booking(booking: BookingCreate, current_user: User = Depends(get_curr
 
 
 @router.get("/{booking_id}", response_model=BookingOut)
-def get_booking(booking_id: int, db: Session = Depends(get_db)):
+def get_booking(booking_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get a booking by ID"""
+    if current_user.user_type != "customer":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only customers can view bookings"
+        )
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
     if not booking:

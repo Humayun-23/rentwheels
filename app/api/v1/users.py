@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from passlib.context import CryptContext
 from typing import List
 
+from app.api.v1.oauth2 import get_current_user, require_admin_token
 from app.db.database import get_db
 from app.db.models import User
 from app.schemas.users import UserCreate, UserUpdate, UserOut
@@ -94,3 +95,11 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error updating user: {str(e)}"
         )
+        
+        
+@router.get("/", response_model=List[UserOut], include_in_schema=False)
+def get_all_users(db: Session = Depends(get_db), _admin: bool = Depends(require_admin_token)):
+    """Get all users (operator-only admin endpoint). Hidden from OpenAPI docs and protected by ADMIN_TOKEN."""
+    users = db.query(User).all()
+    return users
+    

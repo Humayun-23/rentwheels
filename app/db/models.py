@@ -104,3 +104,13 @@ class Booking(Base):
     # Relationships
     customer = relationship("User", back_populates="bookings", foreign_keys=[customer_id])
     bike = relationship("Bike", back_populates="bookings", foreign_keys=[bike_id])
+    
+class AdminUser(Base):
+    """AdminUser model - represents admin users of the system"""
+    __tablename__ = "admin_users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    password = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

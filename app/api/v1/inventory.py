@@ -29,6 +29,14 @@ def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depend
             detail=f"Bike with ID {inventory.bike_id} not found"
         )
 
+    # Check if the current user owns the shop that owns this bike
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to create inventory for this bike"
+        )
+
     # Check if inventory already exists for this bike
     existing = db.query(BikeInventory).filter(BikeInventory.bike_id == inventory.bike_id).first()
     if existing:
@@ -109,6 +117,7 @@ def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only shop owners can update inventory records"
         )
+    
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == bike_id).first()
 
     if not inventory:
@@ -116,6 +125,16 @@ def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No inventory found for bike {bike_id}"
         )
+
+    # Verify ownership: check if the current user owns the shop that owns this bike
+    bike = db.query(Bike).filter(Bike.id == bike_id).first()
+    if bike:
+        shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+        if not shop or shop.owner_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to update inventory for this bike"
+            )
 
     # Update total quantity
     old_total = inventory.total_quantity
