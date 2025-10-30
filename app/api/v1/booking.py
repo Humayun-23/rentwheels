@@ -35,6 +35,16 @@ def create_booking(booking: BookingCreate, current_user: User = Depends(get_curr
         )
 
     # Create booking
+    if booking.start_time >= booking.end_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid booking time range"
+        )
+    if booking.start_time < datetime.now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking start time must be in the future"
+        )
     db_booking = Booking(
         customer_id=current_user.id,
         bike_id=booking.bike_id,

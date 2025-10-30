@@ -1,12 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.db.database import engine, Base
-from app.db import models
 from app.api.v1 import auth, users, shops, booking, listing, searchvehicle
 from app.api.v1 import inventory
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="RentWheels API",
