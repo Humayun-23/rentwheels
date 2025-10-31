@@ -100,10 +100,28 @@ class Booking(Base):
     total_price = Column(Integer, nullable=True)  # Price in cents
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    confirmed_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
 
     # Relationships
     customer = relationship("User", back_populates="bookings", foreign_keys=[customer_id])
     bike = relationship("Bike", back_populates="bookings", foreign_keys=[bike_id])
+
+class Review(Base):
+    """Review model - represents customer reviews for bikes"""
+    __tablename__ = "reviews"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    rating = Column(Integer, nullable=False)  # Rating out of 5
+    comment = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    shop = relationship("Shop", foreign_keys=[shop_id])
+    customer = relationship("User", foreign_keys=[customer_id])
     
 class AdminUser(Base):
     """AdminUser model - represents admin users of the system"""

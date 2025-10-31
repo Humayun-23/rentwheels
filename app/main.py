@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.v1 import auth, users, shops, booking, listing, searchvehicle
+from app.api.v1 import auth, reviews, users, shops, booking, listing, searchvehicle
 from app.api.v1 import inventory
 
 
@@ -27,6 +27,7 @@ app.include_router(booking.router, prefix="/api/v1")
 app.include_router(listing.router, prefix="/api/v1")
 app.include_router(inventory.router, prefix="/api/v1")
 app.include_router(searchvehicle.router, prefix="/api/v1")
+app.include_router(reviews.router, prefix="/api/v1")
 
 
 @app.get("/")

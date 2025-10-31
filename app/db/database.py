@@ -1,7 +1,7 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
-import os
 
 # Database URL - PostgreSQL
 # Set DATABASE_URL environment variable or it will use default
