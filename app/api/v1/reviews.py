@@ -56,9 +56,9 @@ def create_review(shop_id: int, review: ReviewCreate, current_user: User = Depen
     return db_review
 
 @router.get("/{shop_id}/reviews", response_model=list[ReviewOut])
-def get_shop_reviews(shop_id: int, db: Session = Depends(get_db)):
+def get_shop_reviews(shop_id: int, db: Session = Depends(get_db), offset: int = 0, limit: int = 10):
     """Get all reviews for a shop"""
-    reviews = db.query(Review).filter(Review.shop_id == shop_id).all()
+    reviews = db.query(Review).filter(Review.shop_id == shop_id).offset(offset).limit(limit).all()
     return reviews
 
 @router.put("/{shop_id}/reviews/{review_id}", response_model=ReviewOut)

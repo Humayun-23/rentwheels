@@ -117,8 +117,7 @@ def get_booking(booking_id: int, db: Session = Depends(get_db), current_user: Us
     
     return booking
 
-
-@router.get("/", response_model=list[BookingOut])
+@router.get("/user/", response_model=list[BookingOut])
 def get_user_bookings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get all bookings for current user"""
     bookings = db.query(Booking).filter(Booking.customer_id == current_user.id).all()
