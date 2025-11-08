@@ -1,6 +1,9 @@
+# About the Project
+A backend APPI written in FastAPI. It is a platform where physical rent shop owners can list their vehicles and customers can book them.
 # RentWheels API - Project Setup Complete ✅
 
 ## 📦 Project Structure
+
 
 ```
 rentwheels/
