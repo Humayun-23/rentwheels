@@ -17,10 +17,12 @@ def search_vehicles(
     cc_max: Optional[int] = Query(None, description="Maximum engine CC"),
     is_available: Optional[bool] = Query(None, description="Only available vehicles"),
     shop_id: Optional[int] = Query(None, description="Filter by shop ID"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
     db: Session = Depends(get_db)
 ):
     """
-    Search for vehicles by type and engine CC.
+    Search for vehicles by type and engine CC with pagination.
     
     Query Parameters:
     - vehicle_type: Filter by "scooty", "bike", or "car"
@@ -29,12 +31,14 @@ def search_vehicles(
     - cc_max: Maximum engine CC (for range search)
     - is_available: Filter only available vehicles
     - shop_id: Filter by shop ID
+    - skip: Number of records to skip (pagination)
+    - limit: Maximum number of records to return (pagination, max 100)
     
     Examples:
     - GET /api/v1/search/vehicles?vehicle_type=bike
     - GET /api/v1/search/vehicles?vehicle_type=scooty&engine_cc=150
     - GET /api/v1/search/vehicles?vehicle_type=car&cc_min=1000&cc_max=2000
-    - GET /api/v1/search/vehicles?engine_cc=500&is_available=true
+    - GET /api/v1/search/vehicles?engine_cc=500&is_available=true&skip=0&limit=20
     """
     query = db.query(Bike)
     
@@ -60,7 +64,7 @@ def search_vehicles(
     if shop_id is not None:
         query = query.filter(Bike.shop_id == shop_id)
     
-    vehicles = query.all()
+    vehicles = query.offset(skip).limit(limit).all()
     return vehicles
 
 
@@ -69,10 +73,12 @@ def search_vehicles_by_type(
     vehicle_type: Literal["scooty", "bike", "car"],
     is_available: Optional[bool] = Query(None, description="Only available vehicles"),
     shop_id: Optional[int] = Query(None, description="Filter by shop ID"),
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
     db: Session = Depends(get_db)
 ):
     """
-    Search vehicles by type only (simplified endpoint).
+    Search vehicles by type only with pagination (simplified endpoint).
     
     Path Parameters:
     - vehicle_type: "scooty", "bike", or "car"
@@ -80,11 +86,13 @@ def search_vehicles_by_type(
     Query Parameters:
     - is_available: Filter only available vehicles (optional)
     - shop_id: Filter by shop ID (optional)
+    - skip: Number of records to skip (pagination)
+    - limit: Maximum number of records to return (pagination, max 100)
     
     Examples:
     - GET /api/v1/search/vehicles/type/bike
     - GET /api/v1/search/vehicles/type/scooty?is_available=true
-    - GET /api/v1/search/vehicles/type/car?shop_id=1
+    - GET /api/v1/search/vehicles/type/car?shop_id=1&skip=0&limit=20
     """
     query = db.query(Bike).filter(Bike.bike_type == vehicle_type)
     
@@ -94,5 +102,5 @@ def search_vehicles_by_type(
     if shop_id is not None:
         query = query.filter(Bike.shop_id == shop_id)
     
-    vehicles = query.all()
+    vehicles = query.offset(skip).limit(limit).all()
     return vehicles

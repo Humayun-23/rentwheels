@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_
 from datetime import datetime
@@ -73,8 +73,13 @@ def get_inventory_by_bike(bike_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/shop/{shop_id}", response_model=list[BikeInventoryOut])
-def get_shop_inventory(shop_id: int, db: Session = Depends(get_db)):
-    """Get all bike inventory in a shop"""
+def get_shop_inventory(
+    shop_id: int,
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """Get all bike inventory in a shop with pagination"""
     # Check if shop exists
     shop = db.query(Shop).filter(Shop.id == shop_id).first()
     if not shop:
@@ -84,7 +89,9 @@ def get_shop_inventory(shop_id: int, db: Session = Depends(get_db)):
         )
 
     # Get all bikes in this shop with their inventory
-    inventories = db.query(BikeInventory).join(Bike).filter(Bike.shop_id == shop_id).all()
+    inventories = db.query(BikeInventory).join(Bike).filter(
+        Bike.shop_id == shop_id
+    ).offset(skip).limit(limit).all()
 
     return inventories
 

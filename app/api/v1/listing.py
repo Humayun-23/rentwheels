@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import Bike, Shop, User
@@ -53,8 +53,13 @@ def get_bike(bike_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/shop/{shop_id}", response_model=list[BikeOut])
-def get_shop_bikes(shop_id: int, db: Session = Depends(get_db)):
-    """Get all bikes in a shop"""
+def get_shop_bikes(
+    shop_id: int, 
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """Get all bikes in a shop with pagination"""
     shop = db.query(Shop).filter(Shop.id == shop_id).first()
     
     if not shop:
@@ -63,7 +68,9 @@ def get_shop_bikes(shop_id: int, db: Session = Depends(get_db)):
             detail=f"Shop with ID {shop_id} not found"
         )
     
-    bikes = db.query(Bike).filter(Bike.shop_id == shop_id).all()
+    bikes = db.query(Bike).filter(
+        Bike.shop_id == shop_id
+    ).offset(skip).limit(limit).all()
     return bikes
 
 

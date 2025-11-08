@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.db.models import Shop, User
@@ -42,8 +42,12 @@ def get_shop(shop_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=list[ShopOut])
-def get_all_shops(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Get all shops"""
+def get_all_shops(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """Get all shops with pagination"""
     shops = db.query(Shop).offset(skip).limit(limit).all()
     return shops
 

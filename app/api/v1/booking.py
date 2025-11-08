@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -118,11 +118,17 @@ def get_booking(booking_id: int, db: Session = Depends(get_db), current_user: Us
     return booking
 
 @router.get("/user/", response_model=list[BookingOut])
-def get_user_bookings(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get all bookings for current user"""
-    bookings = db.query(Booking).filter(Booking.customer_id == current_user.id).all()
+def get_user_bookings(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    current_user: User = Depends(get_current_user), 
+    db: Session = Depends(get_db)
+):
+    """Get all bookings for current user with pagination"""
+    bookings = db.query(Booking).filter(
+        Booking.customer_id == current_user.id
+    ).offset(skip).limit(limit).all()
     return bookings
-
 
 @router.put("/{booking_id}", response_model=BookingOut)
 def update_booking(booking_id: int, booking_update: BookingUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):

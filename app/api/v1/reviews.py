@@ -2,7 +2,7 @@ from datetime import datetime
 from app.db.database import get_db
 from app.schemas.reviews import ReviewCreate, ReviewOut, ReviewUpdate
 from app.api.v1.oauth2 import get_current_user
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.db.models import Booking, User, Bike, Review
@@ -56,9 +56,16 @@ def create_review(shop_id: int, review: ReviewCreate, current_user: User = Depen
     return db_review
 
 @router.get("/{shop_id}/reviews", response_model=list[ReviewOut])
-def get_shop_reviews(shop_id: int, db: Session = Depends(get_db), offset: int = 0, limit: int = 10):
-    """Get all reviews for a shop"""
-    reviews = db.query(Review).filter(Review.shop_id == shop_id).offset(offset).limit(limit).all()
+def get_shop_reviews(
+    shop_id: int, 
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    db: Session = Depends(get_db)
+):
+    """Get all reviews for a shop with pagination"""
+    reviews = db.query(Review).filter(
+        Review.shop_id == shop_id
+    ).offset(skip).limit(limit).all()
     return reviews
 
 @router.put("/{shop_id}/reviews/{review_id}", response_model=ReviewOut)
