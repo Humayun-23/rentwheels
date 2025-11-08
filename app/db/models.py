@@ -108,7 +108,7 @@ class Booking(Base):
     bike = relationship("Bike", back_populates="bookings", foreign_keys=[bike_id])
 
 class Review(Base):
-    """Review model - represents customer reviews for bikes"""
+    """Review model - represents customer reviews for shops"""
     __tablename__ = "reviews"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -132,3 +132,18 @@ class AdminUser(Base):
     password = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PasswordResetToken(Base):
+    """PasswordResetToken model - stores password reset tokens"""
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationship
+    user = relationship("User", foreign_keys=[user_id])

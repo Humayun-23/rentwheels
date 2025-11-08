@@ -42,9 +42,9 @@ def get_shop(shop_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/", response_model=list[ShopOut])
-def get_all_shops(db: Session = Depends(get_db)):
+def get_all_shops(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """Get all shops"""
-    shops = db.query(Shop).all()
+    shops = db.query(Shop).offset(skip).limit(limit).all()
     return shops
 
 

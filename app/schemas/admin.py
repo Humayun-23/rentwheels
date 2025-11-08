@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Optional
 
 class AdminCreate(BaseModel):
     admin_user_id: int

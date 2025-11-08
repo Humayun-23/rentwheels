@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 
 class Settings(BaseSettings):
     database_hostname: str
@@ -13,6 +14,8 @@ class Settings(BaseSettings):
     admin_token: str | None = None
     # Comma-separated list of IPs allowed to call admin endpoints (defaults to localhost)
     admin_allowed_hosts: str = "127.0.0.1,::1"
+    environment: str = "development"  # or "staging", "production"
+    debug: bool = True      
 
     class Config:
         env_file = ".env"

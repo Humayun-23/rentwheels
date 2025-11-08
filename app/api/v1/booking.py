@@ -1,12 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import PlainTextResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
-from app.main import app
+from app.utils.limiter import limiter
 from app.db.database import get_db
 from app.db.models import Booking, Bike, BikeInventory, User, Shop
 from app.schemas.booking import BookingCreate, BookingUpdate, BookingOut
@@ -15,16 +11,33 @@ from app.api.v1.oauth2 import get_current_user
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+def verify_shop_ownership(booking: Booking, current_user: User, db: Session, action: str = "manage") -> None:
+    """Helper function to verify that the current user owns the shop that owns the bike in the booking"""
+    if current_user.user_type != "shop_owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Only shop owners can {action} bookings"
+        )
+    
+    # Verify that the current user owns the shop that owns the bike
+    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+    if not bike:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bike not found"
+        )
+    
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You can only {action} bookings for bikes in your shop"
+        )
 
 
 @router.post("/", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
-async def homepage(request: Request):
-    return PlainTextResponse("test")
-def create_booking(booking: BookingCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_booking(request: Request, booking: BookingCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create a new booking (customers only)"""
     if current_user.user_type != "customer":
         raise HTTPException(
@@ -40,8 +53,11 @@ def create_booking(booking: BookingCreate, current_user: User = Depends(get_curr
             detail=f"Bike with ID {booking.bike_id} not found"
         )
 
-    # Check if bike is available
-    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
+    # Check if bike is available with row-level lock to prevent race conditions
+    inventory = db.query(BikeInventory).filter(
+        BikeInventory.bike_id == booking.bike_id
+    ).with_for_update().first()
+    
     if not inventory or inventory.available_quantity <= 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -178,20 +194,8 @@ def confirm_booking(booking_id: int, current_user: User = Depends(get_current_us
             detail=f"Booking with ID {booking_id} not found"
         )
     
-    # Verify that the current user owns the shop that owns the bike
-    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
-    if not bike:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bike not found"
-        )
-    
-    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or shop.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only confirm bookings for bikes in your shop"
-        )
+        # Verify that the current user owns the shop
+    verify_shop_ownership(booking, current_user, db, "confirm")
     
     # Only pending bookings can be confirmed
     if booking.status != "pending":
@@ -225,20 +229,8 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
             detail=f"Booking with ID {booking_id} not found"
         )
     
-    # Verify that the current user owns the shop that owns the bike
-    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
-    if not bike:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bike not found"
-        )
-    
-    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or shop.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only reject bookings for bikes in your shop"
-        )
+        # Verify that the current user owns the shop
+    verify_shop_ownership(booking, current_user, db, "reject")
     
     # Only pending bookings can be rejected
     if booking.status != "pending":
@@ -261,12 +253,6 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
 @router.post("/{booking_id}/complete", response_model=BookingOut)
 def complete_booking(booking_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Mark a booking as completed (shop owners only)"""
-    if current_user.user_type != "shop_owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only shop owners can complete bookings"
-        )
-    
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
     if not booking:
@@ -275,20 +261,8 @@ def complete_booking(booking_id: int, current_user: User = Depends(get_current_u
             detail=f"Booking with ID {booking_id} not found"
         )
     
-    # Verify that the current user owns the shop that owns the bike
-    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
-    if not bike:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bike not found"
-        )
-    
-    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or shop.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only complete bookings for bikes in your shop"
-        )
+    # Verify that the current user owns the shop
+    verify_shop_ownership(booking, current_user, db, "complete")
     
     # Only confirmed bookings can be completed
     if booking.status != "confirmed":

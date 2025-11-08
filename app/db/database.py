@@ -11,6 +11,10 @@ DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_pa
 
 engine = create_engine(
     DATABASE_URL,
+    pool_size=20,           # Max persistent connections
+    max_overflow=0,         # No additional connections beyond pool_size
+    pool_pre_ping=True,     # Verify connections before use
+    pool_recycle=3600,      # Recycle connections after 1 hour
     connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 )
 

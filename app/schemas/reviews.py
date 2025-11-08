@@ -1,6 +1,9 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from datetime import datetime
 from typing import Optional
+
+
+from app.utils.sanitization import sanitize_comment
 
 
 class ReviewBase(BaseModel):
@@ -9,12 +12,24 @@ class ReviewBase(BaseModel):
 
 
 class ReviewCreate(ReviewBase):
-    pass
+    @field_validator("comment", mode="before")
+    @classmethod
+    def sanitize_comment_field(cls, v):
+        if v is not None:
+            return sanitize_comment(v)
+        return v
 
 
 class ReviewUpdate(BaseModel):
     rating: Optional[int] = Field(None, ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=500)
+    
+    @field_validator("comment", mode="before")
+    @classmethod
+    def sanitize_comment_field(cls, v):
+        if v is not None:
+            return sanitize_comment(v)
+        return v
 
 
 class ReviewOut(ReviewBase):
