@@ -5,7 +5,8 @@ Run with:
 
 The script is idempotent for known sample emails and will not duplicate entries.
 """
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.utils import tz
 from sqlalchemy.exc import IntegrityError
 
 from app.db.database import SessionLocal
@@ -146,7 +147,7 @@ def create_sample_data():
         # Create a booking with start now, end tomorrow
         existing_booking = db.query(models.Booking).filter(models.Booking.customer_id == customer.id, models.Booking.bike_id == bike.id).first()
         if not existing_booking:
-            start = datetime.utcnow()
+            start = tz.now()
             end = start + timedelta(days=1)
             total_price = bike.price_per_day
             booking = models.Booking(

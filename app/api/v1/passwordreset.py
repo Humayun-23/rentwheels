@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import timedelta
+from app.utils import tz
 import secrets
 
 from app.db.database import get_db
@@ -46,7 +47,7 @@ def request_password_reset(reset_request: PasswordResetRequest, db: Session = De
     reset_token = PasswordResetToken(
         user_id=user.id,
         token=token,
-        expires_at=datetime.utcnow() + timedelta(hours=1)
+        expires_at=tz.now() + timedelta(hours=1)
     )
     
     db.add(reset_token)
@@ -80,7 +81,7 @@ def confirm_password_reset(
         )
     
     # Check if token has expired
-    if reset_token.expires_at < datetime.utcnow():
+    if reset_token.expires_at < tz.now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Reset token has expired"
@@ -97,7 +98,7 @@ def confirm_password_reset(
     
     # Update user password
     user.password = hash_password(reset_confirm.new_password)
-    user.updated_at = datetime.utcnow()
+    user.updated_at = tz.now()
     
     # Mark token as used
     reset_token.is_used = True

@@ -1,6 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Time
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from app.utils import tz
 from .database import Base
 
 
@@ -13,8 +13,8 @@ class User(Base):
     password = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
     user_type = Column(String, nullable=False)  # "customer" or "shop_owner"
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
     # Relationship: One user can own multiple shops
     shops = relationship("Shop", back_populates="owner", foreign_keys="Shop.owner_id")
@@ -38,8 +38,8 @@ class Shop(Base):
     opening_time = Column(Time, nullable=True)
     closing_time = Column(Time, nullable=True)
     is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
     # Relationship: Many shops belong to one user
     owner = relationship("User", back_populates="shops", foreign_keys=[owner_id])
@@ -61,8 +61,8 @@ class Bike(Base):
     price_per_day = Column(Integer, nullable=False)  # Price in cents
     condition = Column(String, nullable=False, default="good")  # "excellent", "good", "fair"
     is_available = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
     # Relationship: Many bikes belong to one shop
     shop = relationship("Shop", back_populates="bikes", foreign_keys=[shop_id])
@@ -80,8 +80,8 @@ class BikeInventory(Base):
     total_quantity = Column(Integer, nullable=False, default=1)  # Total bikes of this type
     available_quantity = Column(Integer, nullable=False, default=1)  # Available for booking
     rented_quantity = Column(Integer, nullable=False, default=0)  # Currently rented
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
     # Relationship: Each inventory record belongs to one bike
     bike = relationship("Bike", back_populates="inventory", foreign_keys=[bike_id])
@@ -98,8 +98,8 @@ class Booking(Base):
     end_time = Column(DateTime, nullable=False)
     status = Column(String, nullable=False, default="pending")  # "pending", "confirmed", "completed", "cancelled"
     total_price = Column(Integer, nullable=True)  # Price in cents
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
     confirmed_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
 
@@ -116,8 +116,8 @@ class Review(Base):
     shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
     rating = Column(Integer, nullable=False)  # Rating out of 5
     comment = Column(String, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
     # Relationships
     shop = relationship("Shop", foreign_keys=[shop_id])
@@ -130,8 +130,8 @@ class AdminUser(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
 
 class PasswordResetToken(Base):
@@ -143,7 +143,7 @@ class PasswordResetToken(Base):
     token = Column(String, unique=True, nullable=False, index=True)
     expires_at = Column(DateTime, nullable=False)
     is_used = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=tz.now)
 
     # Relationship
     user = relationship("User", foreign_keys=[user_id])

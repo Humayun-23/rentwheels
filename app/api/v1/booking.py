@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
 from sqlalchemy.orm import Session
-from datetime import datetime
+from app.utils import tz
 
 from app.utils.limiter import limiter
 from app.db.database import get_db
@@ -76,7 +76,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid booking time range"
         )
-    if booking.start_time < datetime.now():
+    if booking.start_time < tz.now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking start time must be in the future"
@@ -211,7 +211,7 @@ def confirm_booking(booking_id: int, current_user: User = Depends(get_current_us
     
     
     booking.status = "confirmed"
-    booking.confirmed_at = datetime.utcnow()
+    booking.confirmed_at = tz.now()
     db.commit()
     db.refresh(booking)
     return booking
@@ -281,7 +281,7 @@ def complete_booking(booking_id: int, current_user: User = Depends(get_current_u
         inventory.available_quantity += 1
         inventory.rented_quantity -= 1
     booking.status = "completed"
-    booking.completed_at = datetime.utcnow()
+    booking.completed_at = tz.now()
     db.commit()
     db.refresh(booking)
     return booking

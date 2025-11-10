@@ -1,4 +1,4 @@
-from datetime import datetime
+from app.utils import tz
 from app.db.database import get_db
 from app.schemas.reviews import ReviewCreate, ReviewOut, ReviewUpdate
 from app.api.v1.oauth2 import get_current_user
@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.db.models import Booking, User, Bike, Review
+from app.utils.sanitization import sanitize_comment
 
 
 router = APIRouter(prefix="/shops", tags=["reviews"]) 
@@ -47,9 +48,10 @@ def create_review(shop_id: int, review: ReviewCreate, current_user: User = Depen
         shop_id=shop_id,
         rating=review.rating,
         comment=review.comment,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=tz.now(),
+        updated_at=tz.now(),
     )
+    db_review.comment = sanitize_comment(review.comment)
     db.add(db_review)
     db.commit()
     db.refresh(db_review)
@@ -89,9 +91,10 @@ def update_review(shop_id: int, review_id: int, review_update: ReviewUpdate, cur
     if review_update.rating is not None:
         review.rating = review_update.rating
     if review_update.comment is not None:
-        review.comment = review_update.comment
+        review.comment = sanitize_comment(review_update.comment)
 
-    review.updated_at = datetime.utcnow()
+    review.updated_at = tz.now()
+    
 
     db.commit()
     db.refresh(review)
