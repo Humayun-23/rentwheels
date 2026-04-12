@@ -1,11 +1,13 @@
 services:
   backend:
     build:
-      context: ./backend
+      context: ./
       dockerfile: Dockerfile
-    container_name: ridewheel-backend
+    container_name: rentwheels-backend
     env_file:
-      - ./backend/.env
+      - ./.env
+    volumes:
+      - ./.env:/app/.env:ro
     ports:
       - "8000:8000"
     restart: unless-stopped

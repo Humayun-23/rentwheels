@@ -27,6 +27,9 @@ slowapi==0.1.5
 ##logging
 structlog==23.2.0
 
+## Sanitization
+bleach==6.1.0
+
 ##dev help
 better-exceptions==0.3.3
 
