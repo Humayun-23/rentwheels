@@ -1,0 +1,26 @@
+name: Deploy RentWheels Backend
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd ~/rentwheels
+            git pull origin main
+            # Rebuild only the backend to apply code changes
+            docker compose up -d --build backend
+            # Prune old images to save disk space on Oracle's free tier
+            docker image prune -f
