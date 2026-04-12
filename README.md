@@ -71,6 +71,21 @@ Endpoints:
 - Docs: http://localhost:8000/docs
 - Health: http://localhost:8000/health
 
+User creation requires `firstname` and `lastname`:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/users/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@example.com",
+    "password": "SecurePass123",
+    "firstname": "John",
+    "lastname": "Doe",
+    "phone_number": "1234567890",
+    "user_type": "customer"
+  }'
+```
+
 ## API surface (high level)
 
 - `/api/v1/login`, `/api/v1/admin/login`

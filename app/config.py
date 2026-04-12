@@ -27,10 +27,14 @@ class Settings(BaseSettings):
 
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def parse_cors_origins(cls, value: str | list[str]):
+    def parse_cors_origins(cls, value):
+        if isinstance(value, list):
+            return value
         if isinstance(value, str):
+            # Split by comma and strip whitespace from each origin
             return [origin.strip() for origin in value.split(",") if origin.strip()]
-        return value
+        # If value is None or any other type, return an empty list
+        return []
 
     class Config:
         env_file = ".env"
