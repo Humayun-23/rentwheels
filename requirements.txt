@@ -13,7 +13,7 @@ alembic==1.13.1
 psycopg2-binary==2.9.9
 
 ## Auth & security
-PyJWT==2.8.1
+PyJWT==PyJWT==2.9.0
 passlib[bcrypt]==1.7.4
 python-multipart==0.0.9
 bcrypt==3.2.2
