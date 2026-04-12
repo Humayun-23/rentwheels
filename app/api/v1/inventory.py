@@ -37,6 +37,12 @@ def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depend
             detail="You do not have permission to create inventory for this bike"
         )
 
+    if inventory.shop_id != shop.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Inventory shop_id must match the bike's shop"
+        )
+
     # Check if inventory already exists for this bike
     existing = db.query(BikeInventory).filter(BikeInventory.bike_id == inventory.bike_id).first()
     if existing:
@@ -47,6 +53,7 @@ def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depend
 
     db_inventory = BikeInventory(
         bike_id=inventory.bike_id,
+        shop_id=shop.id,
         total_quantity=inventory.total_quantity,
         available_quantity=inventory.total_quantity,
         rented_quantity=0
@@ -150,6 +157,11 @@ def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current
     # Adjust available quantity if total changed
     difference = inventory_update.total_quantity - old_total
     inventory.available_quantity += difference
+    if inventory.available_quantity < 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Total quantity cannot be set below the number of rented vehicles"
+        )
 
     db.commit()
     db.refresh(inventory)

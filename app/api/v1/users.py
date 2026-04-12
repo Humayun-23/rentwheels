@@ -71,7 +71,12 @@ def get_user_by_id(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/{user_id}", response_model=UserOut)
-def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
+def update_user(
+    user_id: int,
+    user_update: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Update a user's information (phone_number, shop)"""
     user = db.query(User).filter(User.id == user_id).first()
 
@@ -79,6 +84,12 @@ def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"User with ID {user_id} not found"
+        )
+
+    if current_user.id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own profile"
         )
 
     # Update only provided fields

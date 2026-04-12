@@ -11,6 +11,14 @@ from app.api.v1.oauth2 import get_current_user
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
+def calculate_booking_price(bike: Bike, start_time, end_time) -> int:
+    duration = end_time - start_time
+    total_hours = max(duration.total_seconds() / 3600, 1)
+    full_days = int(total_hours // 24)
+    remaining_hours = total_hours - (full_days * 24)
+    return int((full_days * bike.price_per_day) + (remaining_hours * bike.price_per_hour))
+
+
 def verify_shop_ownership(booking: Booking, current_user: User, db: Session, action: str = "manage") -> None:
     """Helper function to verify that the current user owns the shop that owns the bike in the booking"""
     if current_user.user_type != "shop_owner":
@@ -53,6 +61,12 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             detail=f"Bike with ID {booking.bike_id} not found"
         )
 
+    if booking.end_time <= booking.start_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking end time must be after the start time"
+        )
+
     # Check if bike is available with row-level lock to prevent race conditions
     inventory = db.query(BikeInventory).filter(
         BikeInventory.bike_id == booking.bike_id
@@ -86,7 +100,8 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
         bike_id=booking.bike_id,
         start_time=booking.start_time,
         end_time=booking.end_time,
-        status="pending"
+        status="pending",
+        total_price=calculate_booking_price(bike, booking.start_time, booking.end_time),
     )
 
     # Update inventory
@@ -98,24 +113,6 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
     db.refresh(db_booking)
     return db_booking
 
-
-@router.get("/{booking_id}", response_model=BookingOut)
-def get_booking(booking_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Get a booking by ID"""
-    if current_user.user_type != "customer":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only customers can view bookings"
-        )
-    booking = db.query(Booking).filter(Booking.id == booking_id).first()
-    
-    if not booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Booking with ID {booking_id} not found"
-        )
-    
-    return booking
 
 @router.get("/user/", response_model=list[BookingOut])
 def get_user_bookings(
@@ -130,9 +127,32 @@ def get_user_bookings(
     ).offset(skip).limit(limit).all()
     return bookings
 
+
+@router.get("/{booking_id}", response_model=BookingOut)
+def get_booking(booking_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Get a booking by ID for the customer or owning shop."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Booking with ID {booking_id} not found"
+        )
+
+    if current_user.user_type == "customer":
+        if booking.customer_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only view your own bookings"
+            )
+        return booking
+
+    verify_shop_ownership(booking, current_user, db, "view")
+    return booking
+
 @router.put("/{booking_id}", response_model=BookingOut)
 def update_booking(booking_id: int, booking_update: BookingUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Update booking status"""
+    """Update a pending booking's time range."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
     if not booking:
@@ -146,9 +166,50 @@ def update_booking(booking_id: int, booking_update: BookingUpdate, current_user:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own bookings"
         )
-    
-    for key, value in booking_update.dict(exclude_unset=True).items():
-        setattr(booking, key, value)
+
+    if booking.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only pending bookings can be updated"
+        )
+
+    if booking_update.status is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking status must be changed through booking actions"
+        )
+
+    new_start_time = booking_update.start_time or booking.start_time
+    new_end_time = booking_update.end_time or booking.end_time
+    if new_start_time < tz.now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking start time must be in the future"
+        )
+    if new_end_time <= new_start_time:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking end time must be after the start time"
+        )
+
+    overlapping_booking = db.query(Booking).filter(
+        Booking.bike_id == booking.bike_id,
+        Booking.id != booking.id,
+        Booking.status.in_(["pending", "confirmed"]),
+        Booking.start_time < new_end_time,
+        Booking.end_time > new_start_time
+    ).first()
+    if overlapping_booking:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Bike is already booked for the requested time range"
+        )
+
+    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+    booking.start_time = new_start_time
+    booking.end_time = new_end_time
+    if bike:
+        booking.total_price = calculate_booking_price(bike, new_start_time, new_end_time)
     
     db.commit()
     db.refresh(booking)
@@ -172,13 +233,18 @@ def cancel_booking(booking_id: int, current_user: User = Depends(get_current_use
             detail="You can only cancel your own bookings"
         )
     
-    # Return inventory when booking is cancelled
+    if booking.status in {"cancelled", "completed"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel a booking with status '{booking.status}'"
+        )
+
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
     if inventory:
         inventory.available_quantity += 1
-        inventory.rented_quantity -= 1
-    
-    db.delete(booking)
+        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
+
+    booking.status = "cancelled"
     db.commit()
 
 
@@ -248,7 +314,7 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
     if inventory:
         inventory.available_quantity += 1
-        inventory.rented_quantity -= 1
+        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
     
     booking.status = "cancelled"
     db.commit()
@@ -279,7 +345,7 @@ def complete_booking(booking_id: int, current_user: User = Depends(get_current_u
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
     if inventory:
         inventory.available_quantity += 1
-        inventory.rented_quantity -= 1
+        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
     booking.status = "completed"
     booking.completed_at = tz.now()
     db.commit()

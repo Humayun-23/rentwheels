@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Literal
 
 from app.db.database import get_db
-from app.db.models import Bike
+from app.db.models import Bike, BikeInventory
 from app.schemas.bikes import BikeOut
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -58,7 +58,11 @@ def search_vehicles(
     
     # Filter by availability
     if is_available is not None:
-        query = query.filter(Bike.is_available == is_available)
+        query = query.join(BikeInventory, BikeInventory.bike_id == Bike.id)
+        if is_available:
+            query = query.filter(BikeInventory.available_quantity > 0)
+        else:
+            query = query.filter(BikeInventory.available_quantity <= 0)
     
     # Filter by shop
     if shop_id is not None:
@@ -97,7 +101,11 @@ def search_vehicles_by_type(
     query = db.query(Bike).filter(Bike.bike_type == vehicle_type)
     
     if is_available is not None:
-        query = query.filter(Bike.is_available == is_available)
+        query = query.join(BikeInventory, BikeInventory.bike_id == Bike.id)
+        if is_available:
+            query = query.filter(BikeInventory.available_quantity > 0)
+        else:
+            query = query.filter(BikeInventory.available_quantity <= 0)
     
     if shop_id is not None:
         query = query.filter(Bike.shop_id == shop_id)
