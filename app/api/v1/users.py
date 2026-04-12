@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from passlib.context import CryptContext
 from typing import List
@@ -17,8 +18,13 @@ router = APIRouter(prefix="/users", tags=["users"])
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """Create a new user (customer or shop_owner)"""
     try:
+        normalized_email = user.email.strip().lower()
         # Check if email already exists
-        existing_user = db.query(User).filter(User.email == user.email).first()
+        existing_user = (
+            db.query(User)
+            .filter(func.lower(User.email) == normalized_email)
+            .first()
+        )
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -30,7 +36,7 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
         # Create new user with hashed password
         db_user = User(
-            email=user.email,
+            email=normalized_email,
             password=hashed_password,
             phone_number=user.phone_number,
             user_type=user.user_type,
@@ -42,11 +48,11 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
 
         return db_user
 
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Error creating user. Email might already exist."
+            detail=f"Error creating user: {exc.orig}"
         )
     except Exception as e:
         db.rollback()
