@@ -11,6 +11,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
+    firstname = Column(String, nullable=False)
+    lastname = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
     user_type = Column(String, nullable=False)  # "customer" or "shop_owner"
     created_at = Column(DateTime, default=tz.now)

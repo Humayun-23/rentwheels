@@ -38,6 +38,8 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         db_user = User(
             email=normalized_email,
             password=hashed_password,
+            firstname=user.firstname,
+            lastname=user.lastname,
             phone_number=user.phone_number,
             user_type=user.user_type,
         )
@@ -99,6 +101,10 @@ def update_user(
         )
 
     # Update only provided fields
+    if user_update.firstname is not None:
+        user.firstname = user_update.firstname
+    if user_update.lastname is not None:
+        user.lastname = user_update.lastname
     if user_update.phone_number is not None:
         user.phone_number = user_update.phone_number
 
