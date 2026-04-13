@@ -1,14 +1,13 @@
 import json
-from pydantic import field_validator, ConfigDict
+from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
 
-def parse_cors_origins_value(v):
-    """Parse CORS origins from string or list format."""
-    if isinstance(v, list):
-        return v
-    if isinstance(v, str):
-        # Accept JSON lists or comma-separated strings.
-        raw = v.strip()
+def parse_cors_origins_value(value):
+    """Parse CORS origins from JSON list or comma-separated string."""
+    if isinstance(value, list):
+        return value
+    if isinstance(value, str):
+        raw = value.strip()
         if raw.startswith("[") and raw.endswith("]"):
             try:
                 parsed = json.loads(raw)
@@ -18,7 +17,7 @@ def parse_cors_origins_value(v):
                 pass
         origins = [origin.strip() for origin in raw.split(",") if origin.strip()]
         return origins if origins else None
-    return v
+    return value
 
 class Settings(BaseSettings):
     model_config = ConfigDict(env_file=".env", extra="ignore")
@@ -35,7 +34,8 @@ class Settings(BaseSettings):
     admin_token: str | None = None
     # Comma-separated list of IPs allowed to call admin endpoints (defaults to localhost)
     admin_allowed_hosts: str = "127.0.0.1,::1"
-    cors_origins: str | list[str] | None = [
+    cors_origins: list[str] = [
+        "https://rentwheels-frontend.vercel.app",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:5173",
@@ -43,10 +43,11 @@ class Settings(BaseSettings):
         "http://localhost:8000",
         "http://127.0.0.1:8000",
     ]
+
     @field_validator("cors_origins", mode="before")
     @classmethod
-    def _normalize_cors_origins(cls, v):
-        return parse_cors_origins_value(v)
+    def _normalize_cors_origins(cls, value):
+        return parse_cors_origins_value(value)
     environment: str = "production"  # or "staging", "production"
     debug: bool = True
 
