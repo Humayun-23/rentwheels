@@ -95,11 +95,8 @@ async def startup_event():
         logger.info("✅ Database connection verified at startup")
     except Exception as e:
         logger.error(f"❌ Failed to connect to database at startup: {str(e)}")
-        # Only fail on startup in production mode
-        if settings.environment == "production":
-            raise RuntimeError("Cannot start application - database unreachable")
-        else:
-            logger.warning("⚠️ Database unavailable but continuing in development mode")
+        # Log warning but don't fail - DB will be checked on first API call
+        logger.warning(f"⚠️ Database unavailable at startup. Connection will be retried on first request. Error: {str(e)}")
 
 
 @app.on_event("shutdown")
