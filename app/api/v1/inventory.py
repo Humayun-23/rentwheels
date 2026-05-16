@@ -14,7 +14,7 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 @router.post("/", response_model=BikeInventoryOut, status_code=status.HTTP_201_CREATED)
 def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create inventory record for a bike"""
-   # Only shop owners can create inventory
+    # ✅ FIXED: Only shop owners can create inventory
     if current_user.user_type != "shop_owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

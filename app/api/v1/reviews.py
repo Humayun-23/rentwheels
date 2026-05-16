@@ -9,11 +9,11 @@ from app.db.models import Booking, User, Bike, Review
 from app.utils.sanitization import sanitize_comment
 
 
-router = APIRouter(prefix="/shops", tags=["reviews"]) 
+router = APIRouter(prefix="/reviews", tags=["reviews"])  # ✅ FIXED: Changed from /shops to /reviews 
 
 
 
-@router.post("/{shop_id}/reviews", response_model=ReviewOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{shop_id}", response_model=ReviewOut, status_code=status.HTTP_201_CREATED)
 def create_review(shop_id: int, review: ReviewCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create a new review for a shop by a customer"""
     if current_user.user_type != "customer":
@@ -57,7 +57,7 @@ def create_review(shop_id: int, review: ReviewCreate, current_user: User = Depen
     db.refresh(db_review)
     return db_review
 
-@router.get("/{shop_id}/reviews", response_model=list[ReviewOut])
+@router.get("/{shop_id}", response_model=list[ReviewOut])
 def get_shop_reviews(
     shop_id: int, 
     skip: int = Query(0, ge=0, description="Number of records to skip"),
@@ -70,7 +70,7 @@ def get_shop_reviews(
     ).offset(skip).limit(limit).all()
     return reviews
 
-@router.put("/{shop_id}/reviews/{review_id}", response_model=ReviewOut)
+@router.put("/{shop_id}/{review_id}", response_model=ReviewOut)
 def update_review(shop_id: int, review_id: int, review_update: ReviewUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update a review for a shop by the customer who created it"""
     review = db.query(Review).filter(Review.id == review_id, Review.shop_id == shop_id).first()
@@ -101,7 +101,7 @@ def update_review(shop_id: int, review_id: int, review_update: ReviewUpdate, cur
     return review
 
 
-@router.delete("/{shop_id}/reviews/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{shop_id}/{review_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_review(shop_id: int, review_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a review created by the current customer"""
     review = db.query(Review).filter(Review.id == review_id, Review.shop_id == shop_id).first()

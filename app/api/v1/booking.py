@@ -67,6 +67,24 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             detail="Booking end time must be after the start time"
         )
 
+    # ✅ FIXED: Booking duration validation
+    from datetime import timedelta
+    MIN_BOOKING_HOURS = 1
+    MAX_BOOKING_DAYS = 30
+    
+    duration = booking.end_time - booking.start_time
+    if duration < timedelta(hours=MIN_BOOKING_HOURS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Booking must be at least {MIN_BOOKING_HOURS} hour(s)"
+        )
+    
+    if duration > timedelta(days=MAX_BOOKING_DAYS):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Booking cannot exceed {MAX_BOOKING_DAYS} days"
+        )
+
     # Check if bike is available with row-level lock to prevent race conditions
     inventory = db.query(BikeInventory).filter(
         BikeInventory.bike_id == booking.bike_id

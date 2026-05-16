@@ -18,7 +18,7 @@ def create_shop(shop: ShopCreate, current_user: User = Depends(get_current_user)
         )
 
     db_shop = Shop(
-        **shop.dict(),
+        **shop.model_dump(exclude_unset=True),  # ✅ FIXED: Pydantic v2
         owner_id=current_user.id
     )
     db.add(db_shop)
@@ -69,7 +69,7 @@ def update_shop(shop_id: int, shop_update: ShopUpdate, current_user: User = Depe
             detail="You can only update your own shop"
         )
     
-    for key, value in shop_update.dict(exclude_unset=True).items():
+    for key, value in shop_update.model_dump(exclude_unset=True).items():  # ✅ FIXED: Pydantic v2
         setattr(shop, key, value)
     
     db.commit()

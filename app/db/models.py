@@ -151,8 +151,11 @@ class PasswordResetToken(Base):
     user = relationship("User", foreign_keys=[user_id])
     
 class Payment(Base):
+    """Payment model - tracks Razorpay payments for bookings"""
     __tablename__ = "payment"
-    order_id = Column(String, primary_key=True, index=True)
+
+    id = Column(Integer, primary_key=True, index=True)  # ✅ FIXED: Proper auto-increment ID
+    order_id = Column(String, unique=True, nullable=False, index=True)  # ✅ Changed to unique instead of PK
     payment_id = Column(String, unique=True, nullable=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True)
     amount = Column(Integer, nullable=False)  # Amount in INR
@@ -162,3 +165,19 @@ class Payment(Base):
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
     
+    # Relationship
+    booking = relationship("Booking", foreign_keys=[booking_id])
+    
+
+# ✅ Explicit exports for better IDE support and migration tracking
+__all__ = [
+    "User",
+    "Shop",
+    "Bike",
+    "BikeInventory",
+    "Booking",
+    "Review",
+    "AdminUser",
+    "PasswordResetToken",
+    "Payment",
+]

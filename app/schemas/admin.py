@@ -3,21 +3,19 @@ from datetime import datetime
 from typing import Optional
 
 class AdminCreate(BaseModel):
-    admin_user_id: int
-    email: str
+    email: str  # ✅ FIXED: Removed non-existent admin_user_id field
     password: str
 
 class AdminRead(BaseModel):
-    admin_user_id: int
+    id: int  # ✅ FIXED: Changed from admin_user_id to id
     email: str
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)  # ✅ FIXED: Updated from orm_mode to v2 syntax
 
 class AdminUpdate(BaseModel):
-    email: Optional[str]
-    password: Optional[str]
+    email: Optional[str] = None
+    password: Optional[str] = None
 
 class AdminOut(AdminRead):
     pass

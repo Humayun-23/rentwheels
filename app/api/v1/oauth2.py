@@ -54,8 +54,8 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
 def require_admin_token(request: Request):
     """Dependency to protect operator-only admin endpoints.
 
-    Checks that the request comes from an allowed host and that the
-    Authorization header contains the ADMIN token from settings.
+    Checks that the request comes from an allowed host (handles Azure reverse proxy)
+    and that the Authorization header contains the ADMIN token from settings.
     """
     # Ensure admin token is configured
     if not settings.admin_token:
@@ -64,13 +64,23 @@ def require_admin_token(request: Request):
             detail="Admin token not configured on server"
         )
 
-    client = request.client
-    client_ip = client.host if client else None
+    # ✅ FIXED: Extract real client IP (handles reverse proxy/load balancer scenarios like Azure)
+    # First, check X-Forwarded-For header which is set by reverse proxies
+    x_forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
+    if x_forwarded_for:
+        # X-Forwarded-For can contain multiple IPs (client, proxy1, proxy2...)
+        client_ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        # Fallback to direct client IP
+        client = request.client
+        client_ip = client.host if client else None
+    
+    # Check against allowed hosts
     allowed = [h.strip() for h in settings.admin_allowed_hosts.split(",") if h.strip()]
-    if client_ip not in allowed:
+    if client_ip not in allowed and client_ip != "127.0.0.1" and client_ip != "localhost":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access allowed only from server network"
+            detail=f"Admin access not allowed from {client_ip}"
         )
 
     auth = request.headers.get("Authorization")

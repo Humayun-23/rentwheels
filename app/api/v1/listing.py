@@ -31,7 +31,7 @@ def create_bike(bike: BikeCreate, current_user: User = Depends(get_current_user)
             detail="You can only add bikes to your own shop"
         )
 
-    db_bike = Bike(**bike.dict())
+    db_bike = Bike(**bike.model_dump(exclude_unset=True))  # ✅ FIXED: Pydantic v2
     db.add(db_bike)
     db.commit()
     db.refresh(db_bike)
@@ -92,7 +92,7 @@ def update_bike(bike_id: int, bike_update: BikeUpdate, current_user: User = Depe
             detail="You can only update bikes in your shop"
         )
     
-    for key, value in bike_update.dict(exclude_unset=True).items():
+    for key, value in bike_update.model_dump(exclude_unset=True).items():  # ✅ FIXED: Pydantic v2
         setattr(bike, key, value)
     
     db.commit()

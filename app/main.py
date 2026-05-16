@@ -1,15 +1,22 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+import logging
 
 from app.utils.limiter import limiter
+from app.utils.logging_config import configure_logging, LoggingMiddleware
 from app.api.v1 import auth, reviews, users, shops, booking, listing, searchvehicle, passwordreset
 from app.api.v1 import inventory
 from app.config import settings
-from app.db.database import get_db
+from app.db.database import get_db, SessionLocal
+
+# Configure logging
+configure_logging()
+logger = logging.getLogger(__name__)
 
 
 app = FastAPI(
@@ -18,21 +25,31 @@ app = FastAPI(
     version="1.0.0",
     docs_url="/docs" if settings.environment != "production" else None,
     redoc_url="/redoc" if settings.environment != "production" else None,
+)
 
+# Add logging middleware FIRST (before other middleware)
+app.add_middleware(LoggingMiddleware)
+
+# Add trusted host middleware for Azure (set X-Forwarded-Proto, etc.)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["*"],  # Allow all hosts since we're behind Azure's load balancer
 )
 
 # Set limiter on app state and register exception handler
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Add CORS middleware
+# Add CORS middleware with proper security settings
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_cors_origins(),
     allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # ✅ FIXED: Explicit methods
+    allow_headers=["Content-Type", "Authorization"],  # ✅ FIXED: Explicit headers
+    expose_headers=["Content-Length", "X-Total-Count"],
+    max_age=600,  # Cache preflight requests for 10 minutes
 )
 
 # Include routers
@@ -67,10 +84,49 @@ def api_info():
     }
 
 
+# Startup and shutdown hooks
+@app.on_event("startup")
+async def startup_event():
+    """Verify database connection on startup (optional for development)"""
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        logger.info("✅ Database connection verified at startup")
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to database at startup: {str(e)}")
+        # Only fail on startup in production mode
+        if settings.environment == "production":
+            raise RuntimeError("Cannot start application - database unreachable")
+        else:
+            logger.warning("⚠️ Database unavailable but continuing in development mode")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    logger.info("🔴 Application shutting down")
+    from app.db.database import dispose_engine
+    dispose_engine()
+
+
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
+    """Liveness probe - application is running"""
     try:
         db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
-    except Exception:
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
         raise HTTPException(status_code=503, detail="Database unavailable")
+
+
+@app.get("/ready")
+def readiness_probe(db: Session = Depends(get_db)):
+    """Readiness probe - application is ready to serve requests"""
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "ready", "database": "connected"}
+    except Exception as e:
+        logger.error(f"Readiness check failed: {str(e)}")
+        raise HTTPException(status_code=503, detail="Not ready")

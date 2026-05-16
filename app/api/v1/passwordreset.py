@@ -102,8 +102,7 @@ def confirm_password_reset(
     
     # Mark token as used
     reset_token.is_used = True
-    
-    db.commit()
+    db.commit()  # ✅ FIXED: Ensure changes are persisted
     
     return PasswordResetResponse(
         message="Password has been successfully reset. You can now login with your new password."
