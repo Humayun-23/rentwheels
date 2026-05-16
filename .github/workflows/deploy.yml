@@ -1,26 +1,93 @@
-name: Deploy RentWheels Backend
+name: Deploy RentWheels Backend to Azure
 
 on:
   push:
     branches: [ main ]
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+env:
+  REGISTRY: ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}
+  IMAGE_NAME: ridewheel-backend
+  APP_NAME: ridewheel-api
 
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Login to Azure Container Registry
+        uses: docker/login-action@v3
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd ~/rentwheels
-            git pull origin main
-            # Rebuild only the backend to apply code changes
-            docker compose up -d --build backend
-            # Prune old images to save disk space on Oracle's free tier
-            docker image prune -f
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ env.APP_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+      
+      - name: Configure App Settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
+            --name ${{ env.APP_NAME }} \
+            --settings \
+              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+              SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+              ADMIN_TOKEN="${{ secrets.ADMIN_TOKEN }}" \
+              ADMIN_ALLOWED_HOSTS="${{ secrets.ADMIN_ALLOWED_HOSTS }}" \
+              DB_POOL_SIZE=5 \
+              DB_POOL_RECYCLE=600 \
+              ENVIRONMENT=production
+      
+      - name: Verify deployment
+        run: |
+          echo "Waiting for app to start..."
+          sleep 10
+          HEALTH_URL="https://${{ env.APP_NAME }}.azurewebsites.net/health"
+          for i in {1..5}; do
+            echo "Health check attempt $i..."
+            if curl -s -f "$HEALTH_URL" | grep -q "healthy"; then
+              echo "✅ Deployment successful!"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "⚠️ Health check timeout - app may still be starting"
+          exit 0
