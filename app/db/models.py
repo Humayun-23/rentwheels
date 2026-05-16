@@ -149,3 +149,16 @@ class PasswordResetToken(Base):
 
     # Relationship
     user = relationship("User", foreign_keys=[user_id])
+    
+class Payment(Base):
+    __tablename__ = "payment"
+    order_id = Column(String, primary_key=True, index=True)
+    payment_id = Column(String, unique=True, nullable=True, index=True)
+    booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+    amount = Column(Integer, nullable=False)  # Amount in INR
+    currency = Column(String, nullable=False, default="INR")
+    razorpay_signature = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="created")  # "created", "paid", "failed"
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
+    

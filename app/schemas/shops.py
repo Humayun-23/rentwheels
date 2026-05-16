@@ -37,6 +37,12 @@ class ShopUpdate(BaseModel):
     closing_time: Optional[time] = None
     is_active: Optional[bool] = None
 
+class ShopImage(BaseModel):
+    id: int
+    image_url: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 class ShopOut(Shop):
-    pass
+    image: list[ShopImage] = []

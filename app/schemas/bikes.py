@@ -35,7 +35,14 @@ class BikeUpdate(BaseModel):
     condition: Optional[Literal["excellent", "good", "fair"]] = None
     is_available: Optional[bool] = None
 
+class BikeImage(BaseModel):
+    id: int
+    bike_id: int
+    image_url: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 class BikeOut(Bike):
-    pass
+    image: list[BikeImage] = []
 
