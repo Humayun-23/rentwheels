@@ -32,4 +32,4 @@ jobs:
               docker compose up -d --build
             fi
             # Run DB migrations inside the backend container
-            docker exec rentwheels-backend alembic upgrade head
+            docker exec rentwheels-backend alembic upgrade heads
