@@ -154,7 +154,8 @@ def verify_email(payload: EmailVerificationRequest, db: Session = Depends(get_db
 
 
 @router.post("/verify-email/resend", response_model=EmailVerificationResponse, status_code=status.HTTP_200_OK)
-def resend_verification(payload: EmailVerificationResend, db: Session = Depends(get_db)):
+@limiter.limit("1/30 seconds")
+def resend_verification(request: Request, payload: EmailVerificationResend, db: Session = Depends(get_db)):
     """Resend verification email."""
     normalized_email = payload.email.strip().lower()
     user = db.query(User).filter(func.lower(func.trim(User.email)) == normalized_email).first()
