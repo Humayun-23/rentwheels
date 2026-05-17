@@ -112,7 +112,7 @@ def confirm_password_reset(
         )
 
     # Check if token has expired
-    if reset_token.expires_at < tz.now():
+    if tz.ensure_aware(reset_token.expires_at) < tz.now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Reset token has expired"

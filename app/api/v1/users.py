@@ -133,7 +133,7 @@ def verify_email(payload: EmailVerificationRequest, db: Session = Depends(get_db
     if not token:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
 
-    if token.expires_at < tz.now():
+    if tz.ensure_aware(token.expires_at) < tz.now():
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token has expired")
 
     user = db.query(User).filter(User.id == token.user_id).first()

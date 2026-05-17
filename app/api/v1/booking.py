@@ -53,6 +53,9 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             detail="Only customers can create bookings"
         )
 
+    start_time = tz.ensure_aware(booking.start_time)
+    end_time = tz.ensure_aware(booking.end_time)
+
     # Check if bike exists
     bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
     if not bike:
@@ -61,7 +64,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             detail=f"Bike with ID {booking.bike_id} not found"
         )
 
-    if booking.end_time <= booking.start_time:
+    if end_time <= start_time:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking end time must be after the start time"
@@ -72,7 +75,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
     MIN_BOOKING_HOURS = 1
     MAX_BOOKING_DAYS = 30
     
-    duration = booking.end_time - booking.start_time
+    duration = end_time - start_time
     if duration < timedelta(hours=MIN_BOOKING_HOURS):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -99,8 +102,8 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
     overlapping_booking = db.query(Booking).filter(
         Booking.bike_id == booking.bike_id,
         Booking.status.in_(["pending", "confirmed"]),
-        Booking.start_time < booking.end_time,
-        Booking.end_time > booking.start_time
+        Booking.start_time < end_time,
+        Booking.end_time > start_time
     ).first()
 
     if overlapping_booking:
@@ -108,7 +111,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid booking time range"
         )
-    if booking.start_time < tz.now():
+    if start_time < tz.now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking start time must be in the future"
@@ -116,10 +119,10 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
     db_booking = Booking(
         customer_id=current_user.id,
         bike_id=booking.bike_id,
-        start_time=booking.start_time,
-        end_time=booking.end_time,
+        start_time=start_time,
+        end_time=end_time,
         status="pending",
-        total_price=calculate_booking_price(bike, booking.start_time, booking.end_time),
+        total_price=calculate_booking_price(bike, start_time, end_time),
     )
 
     # Update inventory
@@ -197,8 +200,8 @@ def update_booking(booking_id: int, booking_update: BookingUpdate, current_user:
             detail="Booking status must be changed through booking actions"
         )
 
-    new_start_time = booking_update.start_time or booking.start_time
-    new_end_time = booking_update.end_time or booking.end_time
+    new_start_time = tz.ensure_aware(booking_update.start_time or booking.start_time)
+    new_end_time = tz.ensure_aware(booking_update.end_time or booking.end_time)
     if new_start_time < tz.now():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
