@@ -1,93 +1,34 @@
-name: Deploy RentWheels Backend to Azure
+name: Deploy Backend to Azure VM
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
-env:
-  REGISTRY: ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}
-  IMAGE_NAME: ridewheel-backend
-  APP_NAME: ridewheel-api
+concurrency:
+  group: deploy-azure-vm
+  cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-      
-      - name: Login to Azure Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
-          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
-      
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Login to Azure
-        uses: azure/login@v2
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      
-      - name: Deploy to Azure App Service
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.APP_NAME }}
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-      
-      - name: Configure App Settings
-        run: |
-          az webapp config appsettings set \
-            --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-            --name ${{ env.APP_NAME }} \
-            --settings \
-              DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-              SECRET_KEY="${{ secrets.SECRET_KEY }}" \
-              ADMIN_TOKEN="${{ secrets.ADMIN_TOKEN }}" \
-              ADMIN_ALLOWED_HOSTS="${{ secrets.ADMIN_ALLOWED_HOSTS }}" \
-              DB_POOL_SIZE=5 \
-              DB_POOL_RECYCLE=600 \
-              ENVIRONMENT=production
-      
-      - name: Verify deployment
-        run: |
-          echo "Waiting for app to start..."
-          sleep 10
-          HEALTH_URL="https://${{ env.APP_NAME }}.azurewebsites.net/health"
-          for i in {1..5}; do
-            echo "Health check attempt $i..."
-            if curl -s -f "$HEALTH_URL" | grep -q "healthy"; then
-              echo "✅ Deployment successful!"
-              exit 0
+          host: ${{ secrets.AZURE_VM_HOST }}
+          username: ${{ secrets.AZURE_VM_USER }}
+          key: ${{ secrets.AZURE_VM_SSH_KEY_GOPANDA }}
+          port: 22
+          script: |
+            set -e
+            cd /home/humayun/rentwheels
+            git fetch --prune
+            git checkout main
+            git pull origin main
+            cd backend
+            if command -v docker-compose >/dev/null 2>&1; then
+              docker-compose up -d --build
+            else
+              docker compose up -d --build
             fi
-            sleep 5
-          done
-          echo "⚠️ Health check timeout - app may still be starting"
-          exit 0
