@@ -12,6 +12,7 @@ from email.message import EmailMessage
 import logging
 
 from app.api.v1.oauth2 import get_current_user, require_admin_token
+from app.api.v1.oauth2 import create_access_token
 from app.db.database import get_db
 from app.db.models import User, EmailVerificationToken
 from app.schemas.users import UserCreate, UserUpdate, UserOut
@@ -144,7 +145,12 @@ def verify_email(payload: EmailVerificationRequest, db: Session = Depends(get_db
     token.is_used = True
     db.commit()
 
-    return EmailVerificationResponse(message="Email verified successfully")
+    access_token = create_access_token(data={"user_id": user.id})
+    return EmailVerificationResponse(
+        message="Email verified successfully",
+        access_token=access_token,
+        token_type="bearer",
+    )
 
 
 @router.post("/verify-email/resend", response_model=EmailVerificationResponse, status_code=status.HTTP_200_OK)

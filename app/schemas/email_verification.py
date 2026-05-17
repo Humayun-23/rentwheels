@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 
 class EmailVerificationRequest(BaseModel):
@@ -11,3 +12,5 @@ class EmailVerificationResend(BaseModel):
 
 class EmailVerificationResponse(BaseModel):
     message: str
+    access_token: Optional[str] = None
+    token_type: Optional[str] = None
