@@ -26,7 +26,6 @@ jobs:
             git fetch --prune
             git checkout main
             git pull origin main
-            cd backend
             if command -v docker-compose >/dev/null 2>&1; then
               docker-compose up -d --build
             else
