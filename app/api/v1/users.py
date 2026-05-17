@@ -24,7 +24,7 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
         # Check if email already exists
         existing_user = (
             db.query(User)
-            .filter(func.lower(User.email) == normalized_email)
+            .filter(func.lower(func.trim(User.email)) == normalized_email)
             .first()
         )
         if existing_user:
@@ -52,6 +52,9 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
 
         return db_user
 
+    except HTTPException:
+        db.rollback()
+        raise
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(

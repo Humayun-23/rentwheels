@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from typing import List, Optional, Literal
 
 from app.db.database import get_db
@@ -58,11 +59,25 @@ def search_vehicles(
     
     # Filter by availability
     if is_available is not None:
-        query = query.join(BikeInventory, BikeInventory.bike_id == Bike.id)
+        query = query.outerjoin(BikeInventory, BikeInventory.bike_id == Bike.id)
         if is_available:
-            query = query.filter(BikeInventory.available_quantity > 0)
+            query = query.filter(
+                or_(
+                    and_(BikeInventory.id.is_(None), Bike.is_available.is_(True)),
+                    and_(
+                        BikeInventory.id.isnot(None),
+                        BikeInventory.available_quantity > 0,
+                        Bike.is_available.is_(True),
+                    ),
+                )
+            )
         else:
-            query = query.filter(BikeInventory.available_quantity <= 0)
+            query = query.filter(
+                or_(
+                    Bike.is_available.is_(False),
+                    and_(BikeInventory.id.isnot(None), BikeInventory.available_quantity <= 0),
+                )
+            )
     
     # Filter by shop
     if shop_id is not None:
@@ -101,11 +116,25 @@ def search_vehicles_by_type(
     query = db.query(Bike).filter(Bike.bike_type == vehicle_type)
     
     if is_available is not None:
-        query = query.join(BikeInventory, BikeInventory.bike_id == Bike.id)
+        query = query.outerjoin(BikeInventory, BikeInventory.bike_id == Bike.id)
         if is_available:
-            query = query.filter(BikeInventory.available_quantity > 0)
+            query = query.filter(
+                or_(
+                    and_(BikeInventory.id.is_(None), Bike.is_available.is_(True)),
+                    and_(
+                        BikeInventory.id.isnot(None),
+                        BikeInventory.available_quantity > 0,
+                        Bike.is_available.is_(True),
+                    ),
+                )
+            )
         else:
-            query = query.filter(BikeInventory.available_quantity <= 0)
+            query = query.filter(
+                or_(
+                    Bike.is_available.is_(False),
+                    and_(BikeInventory.id.isnot(None), BikeInventory.available_quantity <= 0),
+                )
+            )
     
     if shop_id is not None:
         query = query.filter(Bike.shop_id == shop_id)

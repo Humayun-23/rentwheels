@@ -99,7 +99,7 @@ class Booking(Base):
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
     status = Column(String, nullable=False, default="pending")  # "pending", "confirmed", "completed", "cancelled"
-    total_price = Column(Integer, nullable=True)  # Price in cents
+    total_price = Column(Integer, nullable=True)  # Price in inr
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
     confirmed_at = Column(DateTime, nullable=True)
@@ -151,7 +151,6 @@ class PasswordResetToken(Base):
     user = relationship("User", foreign_keys=[user_id])
     
 class Payment(Base):
-    """Payment model - tracks Razorpay payments for bookings"""
     __tablename__ = "payment"
 
     id = Column(Integer, primary_key=True, index=True)  # ✅ FIXED: Proper auto-increment ID
@@ -165,19 +164,3 @@ class Payment(Base):
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
     
-    # Relationship
-    booking = relationship("Booking", foreign_keys=[booking_id])
-    
-
-# ✅ Explicit exports for better IDE support and migration tracking
-__all__ = [
-    "User",
-    "Shop",
-    "Bike",
-    "BikeInventory",
-    "Booking",
-    "Review",
-    "AdminUser",
-    "PasswordResetToken",
-    "Payment",
-]
