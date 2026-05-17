@@ -1,5 +1,5 @@
 import json
-from pydantic import ConfigDict, field_validator
+from pydantic import ConfigDict, Field, field_validator
 from pydantic_settings import BaseSettings
 
 
@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     environment: str = "production"
     debug: bool = False
+
+    cloudinary_url: str | None = Field(default=None, validation_alias="CLOUDINARY_URL")
 
     @field_validator("cors_origins", mode="before")
     @classmethod

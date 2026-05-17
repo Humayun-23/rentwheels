@@ -4,13 +4,27 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from passlib.context import CryptContext
 from typing import List
+from datetime import timedelta
+import os
+import secrets
+import smtplib
+from email.message import EmailMessage
+import logging
 
 from app.api.v1.oauth2 import get_current_user, require_admin_token
 from app.db.database import get_db
-from app.db.models import User
+from app.db.models import User, EmailVerificationToken
 from app.schemas.users import UserCreate, UserUpdate, UserOut
+from app.schemas.email_verification import (
+    EmailVerificationRequest,
+    EmailVerificationResend,
+    EmailVerificationResponse,
+)
 from app.utils import utils
 from app.utils.limiter import limiter
+from app.utils import tz
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -50,6 +64,45 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
         db.commit()
         db.refresh(db_user)
 
+        # Create verification token (expires in 24 hours)
+        token = secrets.token_urlsafe(32)
+        verification = EmailVerificationToken(
+            user_id=db_user.id,
+            token=token,
+            expires_at=tz.now() + timedelta(hours=24),
+        )
+        db.add(verification)
+        db.commit()
+
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+        verify_link = f"{frontend_url}/verify-email?token={token}"
+
+        smtp_host = os.getenv("SMTP_HOST")
+        smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        smtp_user = os.getenv("SMTP_USER")
+        smtp_password = os.getenv("SMTP_PASSWORD")
+        smtp_sender = os.getenv("SMTP_SENDER", smtp_user or "noreply@gopanda.in")
+
+        if smtp_host and smtp_user and smtp_password:
+            msg = EmailMessage()
+            msg["Subject"] = "Verify your GoPanda account"
+            msg["From"] = smtp_sender
+            msg["To"] = db_user.email
+            msg.set_content(
+                "Welcome to GoPanda!\n\n"
+                "Please verify your email address to activate your account:\n"
+                f"{verify_link}\n\n"
+                "This link expires in 24 hours."
+            )
+
+            try:
+                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_password)
+                    server.send_message(msg)
+            except Exception:
+                logger.exception("Failed to send verification email")
+
         return db_user
 
     except HTTPException:
@@ -67,6 +120,88 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
         )
+
+
+@router.post("/verify-email", response_model=EmailVerificationResponse, status_code=status.HTTP_200_OK)
+def verify_email(payload: EmailVerificationRequest, db: Session = Depends(get_db)):
+    """Verify email with a token."""
+    token = db.query(EmailVerificationToken).filter(
+        EmailVerificationToken.token == payload.token,
+        EmailVerificationToken.is_used == False,
+    ).first()
+
+    if not token:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
+
+    if token.expires_at < tz.now():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification token has expired")
+
+    user = db.query(User).filter(User.id == token.user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.is_email_verified = True
+    token.is_used = True
+    db.commit()
+
+    return EmailVerificationResponse(message="Email verified successfully")
+
+
+@router.post("/verify-email/resend", response_model=EmailVerificationResponse, status_code=status.HTTP_200_OK)
+def resend_verification(payload: EmailVerificationResend, db: Session = Depends(get_db)):
+    """Resend verification email."""
+    normalized_email = payload.email.strip().lower()
+    user = db.query(User).filter(func.lower(func.trim(User.email)) == normalized_email).first()
+
+    if not user:
+        return EmailVerificationResponse(message="If the email exists, a verification link has been sent.")
+
+    if user.is_email_verified:
+        return EmailVerificationResponse(message="Email is already verified.")
+
+    db.query(EmailVerificationToken).filter(
+        EmailVerificationToken.user_id == user.id,
+        EmailVerificationToken.is_used == False,
+    ).update({"is_used": True})
+
+    token = secrets.token_urlsafe(32)
+    verification = EmailVerificationToken(
+        user_id=user.id,
+        token=token,
+        expires_at=tz.now() + timedelta(hours=24),
+    )
+    db.add(verification)
+    db.commit()
+
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+    verify_link = f"{frontend_url}/verify-email?token={token}"
+
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_sender = os.getenv("SMTP_SENDER", smtp_user or "noreply@gopanda.in")
+
+    if smtp_host and smtp_user and smtp_password:
+        msg = EmailMessage()
+        msg["Subject"] = "Verify your GoPanda account"
+        msg["From"] = smtp_sender
+        msg["To"] = user.email
+        msg.set_content(
+            "Please verify your email address to activate your account:\n"
+            f"{verify_link}\n\n"
+            "This link expires in 24 hours."
+        )
+
+        try:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        except Exception:
+            logger.exception("Failed to send verification email")
+
+    return EmailVerificationResponse(message="If the email exists, a verification link has been sent.")
 
 
 @router.get("/{user_id}", response_model=UserOut)

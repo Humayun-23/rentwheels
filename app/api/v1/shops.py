@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import Shop, User
+from app.db.models import Shop, User, ShopImage
 from app.schemas.shops import ShopCreate, ShopUpdate, ShopOut
 from app.api.v1.oauth2 import get_current_user
+from app.utils.cloudinary_client import upload_image
 
 router = APIRouter(prefix="/shops", tags=["shops"])
 
@@ -120,3 +121,37 @@ def delete_shop(shop_id: int, current_user: User = Depends(get_current_user), db
     
     db.delete(shop)
     db.commit()
+
+
+@router.post("/{shop_id}/image", response_model=ShopOut)
+def upload_shop_image(
+    shop_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload or replace a single shop image"""
+    shop = db.query(Shop).filter(Shop.id == shop_id).first()
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Shop with ID {shop_id} not found",
+        )
+
+    if shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own shop",
+        )
+
+    image_url = upload_image(file, folder=f"shops/{shop_id}")
+
+    existing = db.query(ShopImage).filter(ShopImage.shop_id == shop_id).first()
+    if existing:
+        existing.image_url = image_url
+    else:
+        db.add(ShopImage(shop_id=shop_id, image_url=image_url))
+
+    db.commit()
+    db.refresh(shop)
+    return shop

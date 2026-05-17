@@ -25,6 +25,9 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
     if not verify_password(user_credentials.password, user.password):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
 
+    if not user.is_email_verified:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
+
     access_token = create_access_token(data={"user_id": user.id})
     return {"access_token": access_token, "token_type": "bearer"}
 

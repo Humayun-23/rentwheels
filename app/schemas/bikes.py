@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, computed_field
 from datetime import datetime
 from typing import Optional, Literal
 
@@ -45,4 +45,11 @@ class BikeImage(BaseModel):
 
 class BikeOut(Bike):
     image: list[BikeImage] = []
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        if self.image:
+            return self.image[0].image_url
+        return None
 

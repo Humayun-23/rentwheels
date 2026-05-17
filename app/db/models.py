@@ -15,6 +15,7 @@ class User(Base):
     lastname = Column(String, nullable=False)
     phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
     user_type = Column(String, nullable=False)  # "customer" or "shop_owner"
+    is_email_verified = Column(Boolean, default=False)
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
@@ -46,6 +47,19 @@ class Shop(Base):
     # Relationship: Many shops belong to one user
     owner = relationship("User", back_populates="shops", foreign_keys=[owner_id])
     bikes = relationship("Bike", back_populates="shop", cascade="all, delete-orphan")
+    image = relationship("ShopImage", back_populates="shop", cascade="all, delete-orphan")
+
+
+class ShopImage(Base):
+    """ShopImage model - stores shop photos"""
+    __tablename__ = "shop_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    image_url = Column(String, nullable=False)
+    created_at = Column(DateTime, default=tz.now)
+
+    shop = relationship("Shop", back_populates="image", foreign_keys=[shop_id])
 
 
 class Bike(Base):
@@ -70,6 +84,19 @@ class Bike(Base):
     shop = relationship("Shop", back_populates="bikes", foreign_keys=[shop_id])
     bookings = relationship("Booking", back_populates="bike", cascade="all, delete-orphan")
     inventory = relationship("BikeInventory", back_populates="bike", uselist=False, cascade="all, delete-orphan")
+    image = relationship("BikeImage", back_populates="bike", cascade="all, delete-orphan")
+
+
+class BikeImage(Base):
+    """BikeImage model - stores vehicle photos"""
+    __tablename__ = "bike_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, index=True)
+    image_url = Column(String, nullable=False)
+    created_at = Column(DateTime, default=tz.now)
+
+    bike = relationship("Bike", back_populates="image", foreign_keys=[bike_id])
 
 
 class BikeInventory(Base):
@@ -148,6 +175,20 @@ class PasswordResetToken(Base):
     created_at = Column(DateTime, default=tz.now)
 
     # Relationship
+    user = relationship("User", foreign_keys=[user_id])
+
+
+class EmailVerificationToken(Base):
+    """EmailVerificationToken model - stores email verification tokens"""
+    __tablename__ = "email_verification_tokens"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False)
+    is_used = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=tz.now)
+
     user = relationship("User", foreign_keys=[user_id])
     
 class Payment(Base):

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, ConfigDict, Field
+from pydantic import BaseModel, EmailStr, ConfigDict, Field, computed_field
 from datetime import datetime, time
 from typing import Optional
 
@@ -46,3 +46,10 @@ class ShopImage(BaseModel):
 
 class ShopOut(Shop):
     image: list[ShopImage] = []
+
+    @computed_field
+    @property
+    def image_url(self) -> str | None:
+        if self.image:
+            return self.image[0].image_url
+        return None
