@@ -64,12 +64,11 @@ def require_admin_token(request: Request):
             detail="Admin token not configured on server"
         )
 
-    # ✅ FIXED: Extract real client IP (handles reverse proxy/load balancer scenarios like Azure)
-    # First, check X-Forwarded-For header which is set by reverse proxies
+    # Extract real client IP (handles reverse proxy/load balancer scenarios like Azure)
+    # Use the last IP in X-Forwarded-For because nginx appends the real client IP.
     x_forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
     if x_forwarded_for:
-        # X-Forwarded-For can contain multiple IPs (client, proxy1, proxy2...)
-        client_ip = x_forwarded_for.split(",")[0].strip()
+        client_ip = x_forwarded_for.split(",")[-1].strip()
     else:
         # Fallback to direct client IP
         client = request.client
