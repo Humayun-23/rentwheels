@@ -18,6 +18,7 @@ class Booking(BookingCreate):
         "confirmed",
         "paid",
         "completed",
+        "returned",
         "cancelled",
         "refund_pending",
         "refunded",

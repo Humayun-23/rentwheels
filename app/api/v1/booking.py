@@ -413,3 +413,36 @@ def complete_booking(booking_id: int, current_user: User = Depends(get_current_u
     db.commit()
     db.refresh(booking)
     return booking
+
+
+@router.post("/{booking_id}/return", response_model=BookingOut)
+def return_booking(booking_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Mark a booking as returned/completed and update inventory (shop owners only)"""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Booking with ID {booking_id} not found"
+        )
+    
+    # Verify that the current user owns the shop
+    verify_shop_ownership(booking, current_user, db, "return")
+    
+    # Only confirmed or paid bookings can be marked as returned
+    if booking.status not in {"confirmed", "paid", "completed"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot mark booking as returned with status '{booking.status}'. Only confirmed, paid, or completed bookings can be returned."
+        )
+    
+    # Return inventory when booking is returned
+    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
+    if inventory:
+        inventory.available_quantity += 1
+        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
+    
+    booking.status = "returned"
+    db.commit()
+    db.refresh(booking)
+    return booking

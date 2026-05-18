@@ -46,13 +46,15 @@ def _razorpay_request(method: str, path: str, payload: dict[str, Any] | None = N
     )
 
     try:
-        with urllib.request.urlopen(request) as response:
+        with urllib.request.urlopen(request, timeout=5) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         error_body = exc.read().decode("utf-8")
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Razorpay error: {error_body}")
     except urllib.error.URLError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Razorpay connection error: {exc.reason}")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Razorpay request failed: {str(exc)}")
 
 
 def _booking_amount_paise(booking: Booking) -> int:
