@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import Bike, Shop, User, BikeImage
+from app.db.models import Bike, Shop, User, BikeImage, BikeInventory
 from app.schemas.bikes import BikeCreate, BikeUpdate, BikeOut
 from app.api.v1.oauth2 import get_current_user
 from app.utils.cloudinary_client import upload_image
@@ -34,6 +34,14 @@ def create_bike(bike: BikeCreate, current_user: User = Depends(get_current_user)
 
     db_bike = Bike(**bike.model_dump(exclude_unset=True))  # ✅ FIXED: Pydantic v2
     db.add(db_bike)
+    db.flush()
+    db.add(BikeInventory(
+        bike_id=db_bike.id,
+        shop_id=shop.id,
+        total_quantity=1,
+        available_quantity=1,
+        rented_quantity=0,
+    ))
     db.commit()
     db.refresh(db_bike)
     return db_bike
