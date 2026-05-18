@@ -149,6 +149,40 @@ def get_user_bookings(
     return bookings
 
 
+@router.get("/", response_model=list[BookingOut])
+def list_bookings(
+    skip: int = Query(0, ge=0, description="Number of records to skip"),
+    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List bookings visible to the current user.
+
+    Customers see their own bookings. Shop owners see bookings for vehicles in
+    shops they own, which lets them confirm/reject pending requests.
+    """
+    if current_user.user_type == "customer":
+        return db.query(Booking).filter(
+            Booking.customer_id == current_user.id
+        ).offset(skip).limit(limit).all()
+
+    if current_user.user_type == "shop_owner":
+        return (
+            db.query(Booking)
+            .join(Bike, Booking.bike_id == Bike.id)
+            .join(Shop, Bike.shop_id == Shop.id)
+            .filter(Shop.owner_id == current_user.id)
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have permission to list bookings",
+    )
+
+
 @router.get("/{booking_id}", response_model=BookingOut)
 def get_booking(booking_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Get a booking by ID for the customer or owning shop."""
