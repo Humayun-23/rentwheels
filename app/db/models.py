@@ -194,14 +194,16 @@ class EmailVerificationToken(Base):
 class Payment(Base):
     __tablename__ = "payment"
 
-    id = Column(Integer, primary_key=True, index=True)  # ✅ FIXED: Proper auto-increment ID
-    order_id = Column(String, unique=True, nullable=False, index=True)  # ✅ Changed to unique instead of PK
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(String, unique=True, nullable=False, index=True)
     payment_id = Column(String, unique=True, nullable=True, index=True)
+    refund_id = Column(String, unique=True, nullable=True, index=True)
     booking_id = Column(Integer, ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True)
-    amount = Column(Integer, nullable=False)  # Amount in INR
+    amount = Column(Integer, nullable=False)  # Amount in paise for Razorpay
+    refunded_amount = Column(Integer, nullable=False, default=0)
     currency = Column(String, nullable=False, default="INR")
     razorpay_signature = Column(String, nullable=True)
-    status = Column(String, nullable=False, default="created")  # "created", "paid", "failed"
+    status = Column(String, nullable=False, default="created")  # "created", "paid", "failed", "refunded", "refund_pending"
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
     

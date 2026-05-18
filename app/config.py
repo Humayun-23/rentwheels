@@ -35,6 +35,19 @@ class Settings(BaseSettings):
             return ",".join(v)  # normalize back to string for consistency
         return v if isinstance(v, str) else ""
 
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, v):
+        if isinstance(v, bool):
+            return v
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            if normalized in {"1", "true", "yes", "on", "debug"}:
+                return True
+            if normalized in {"0", "false", "no", "off", "release", "production"}:
+                return False
+        return v
+
     def get_cors_origins(self) -> list[str]:
         if not self.cors_origins.strip():
             return []

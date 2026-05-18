@@ -21,16 +21,19 @@ class PaymentVerify(BaseModel):
     razorpay_signature: str
 
 
-class PaymentUpdate(BaseModel):
-    status: str
-    updated_at: Optional[datetime] = None
+class RefundCreate(BaseModel):
+    order_id: str
+    amount: Optional[int] = None
+    reason: Optional[str] = None
 
 
 class PaymentOut(BaseModel):
     order_id: str
     payment_id: Optional[str] = None
+    refund_id: Optional[str] = None
     booking_id: int
     amount: int
+    refunded_amount: int = 0
     currency: str
     razorpay_signature: Optional[str] = None
     status: str

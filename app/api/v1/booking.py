@@ -4,7 +4,7 @@ from app.utils import tz
 
 from app.utils.limiter import limiter
 from app.db.database import get_db
-from app.db.models import Booking, Bike, BikeInventory, User, Shop
+from app.db.models import Booking, Bike, BikeInventory, User, Shop, Payment
 from app.schemas.booking import BookingCreate, BookingUpdate, BookingOut
 from app.api.v1.oauth2 import get_current_user
 
@@ -101,7 +101,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
     #checking if the same bike is already booked for the requested time range
     overlapping_booking = db.query(Booking).filter(
         Booking.bike_id == booking.bike_id,
-        Booking.status.in_(["pending", "confirmed"]),
+        Booking.status.in_(["pending", "confirmed", "paid"]),
         Booking.start_time < end_time,
         Booking.end_time > start_time
     ).first()
@@ -216,7 +216,7 @@ def update_booking(booking_id: int, booking_update: BookingUpdate, current_user:
     overlapping_booking = db.query(Booking).filter(
         Booking.bike_id == booking.bike_id,
         Booking.id != booking.id,
-        Booking.status.in_(["pending", "confirmed"]),
+        Booking.status.in_(["pending", "confirmed", "paid"]),
         Booking.start_time < new_end_time,
         Booking.end_time > new_start_time
     ).first()
@@ -254,11 +254,18 @@ def cancel_booking(booking_id: int, current_user: User = Depends(get_current_use
             detail="You can only cancel your own bookings"
         )
     
-    if booking.status in {"cancelled", "completed"}:
+    if booking.status in {"cancelled", "completed", "refunded"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot cancel a booking with status '{booking.status}'"
         )
+    if booking.status in {"paid", "refund_pending"}:
+        paid_payment = db.query(Payment).filter(Payment.booking_id == booking.id, Payment.status == "paid").first()
+        if paid_payment:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Paid bookings must be cancelled through the refund flow"
+            )
 
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
     if inventory:
@@ -357,10 +364,10 @@ def complete_booking(booking_id: int, current_user: User = Depends(get_current_u
     verify_shop_ownership(booking, current_user, db, "complete")
     
     # Only confirmed bookings can be completed
-    if booking.status != "confirmed":
+    if booking.status not in {"confirmed", "paid"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot complete booking with status '{booking.status}'. Only confirmed bookings can be completed."
+            detail=f"Cannot complete booking with status '{booking.status}'. Only confirmed or paid bookings can be completed."
         )
     # Return inventory when booking is completed
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()

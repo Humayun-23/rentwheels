@@ -13,7 +13,15 @@ class BookingCreate(BaseModel):
 class Booking(BookingCreate):
     id: int
     customer_id: int
-    status: Literal["pending", "confirmed", "completed", "cancelled"]
+    status: Literal[
+        "pending",
+        "confirmed",
+        "paid",
+        "completed",
+        "cancelled",
+        "refund_pending",
+        "refunded",
+    ]
     total_price: Optional[int] = None  # Price in cents, calculated from bike hourly/daily rate
     created_at: datetime
     updated_at: datetime
