@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import Bike, Shop, User, BikeImage, BikeInventory
+from app.db.models import Bike, Shop, User, BikeImage, BikeInventory, Review
 from app.schemas.bikes import BikeCreate, BikeUpdate, BikeOut
 from app.api.v1.oauth2 import get_current_user
 from app.utils.cloudinary_client import upload_image
@@ -84,6 +84,42 @@ def get_shop_bikes(
     ).offset(skip).limit(limit).all()
     return bikes
 
+
+@router.get("/{bike_id}/full-details")
+def get_bike_full_details(bike_id: int, db: Session = Depends(get_db)):
+    """Get all vehicle details including shop, inventory, and reviews in a single API call."""
+    # OPTIMIZATION: Fetch Bike, Inventory, and Shop in ONE single round-trip using SQL Joins
+    result = db.query(Bike, BikeInventory, Shop)\
+        .outerjoin(BikeInventory, BikeInventory.bike_id == Bike.id)\
+        .outerjoin(Shop, Shop.id == Bike.shop_id)\
+        .filter(Bike.id == bike_id)\
+        .first()
+    
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bike with ID {bike_id} not found"
+        )
+    
+    bike, inventory, shop = result
+    
+    avail_dict = None
+    if inventory:
+        avail_dict = {
+            "bike_id": bike_id,
+            "is_available": inventory.available_quantity > 0,
+            "available_count": inventory.available_quantity,
+            "total_count": inventory.total_quantity
+        }
+        
+    reviews = db.query(Review).filter(Review.shop_id == bike.shop_id).order_by(Review.created_at.desc()).limit(20).all() if bike.shop_id else []
+    
+    return {
+        "vehicle": BikeOut.model_validate(bike),
+        "availability": avail_dict,
+        "shop": shop,
+        "reviews": reviews
+    }
 
 @router.put("/{bike_id}", response_model=BikeOut)
 def update_bike(bike_id: int, bike_update: BikeUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
