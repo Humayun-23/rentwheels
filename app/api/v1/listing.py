@@ -8,6 +8,8 @@ from app.utils.cloudinary_client import upload_image
 
 router = APIRouter(prefix="/bikes", tags=["bikes"])
 
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 @router.post("/", response_model=BikeOut, status_code=status.HTTP_201_CREATED)
 def create_bike(bike: BikeCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -172,6 +174,18 @@ def upload_bike_images(
         )
 
     for file in files:
+        if file.content_type not in ALLOWED_IMAGE_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type: {file.content_type}. Only JPEG, PNG, and WebP are allowed."
+            )
+        
+        if file.size and file.size > MAX_IMAGE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="One or more files exceed the 5MB limit."
+            )
+
         image_url = upload_image(file, folder=f"bikes/{bike_id}")
         db.add(BikeImage(bike_id=bike_id, image_url=image_url))
 

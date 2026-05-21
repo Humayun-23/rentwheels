@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from app.utils import tz
@@ -22,9 +22,18 @@ from app.utils.utils import hash_password
 router = APIRouter(prefix="/password-reset", tags=["password-reset"])
 logger = logging.getLogger(__name__)
 
+def send_email_background(host: str, port: int, user: str, password: str, msg: EmailMessage):
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as server:
+            server.starttls()
+            server.login(user, password)
+            server.send_message(msg)
+    except Exception:
+        logger.exception("Failed to send email")
+
 
 @router.post("/request", response_model=PasswordResetResponse, status_code=status.HTTP_200_OK)
-def request_password_reset(reset_request: PasswordResetRequest, db: Session = Depends(get_db)):
+def request_password_reset(reset_request: PasswordResetRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Request a password reset token.
     In production, this should send an email with the reset link.
@@ -59,7 +68,7 @@ def request_password_reset(reset_request: PasswordResetRequest, db: Session = De
     db.commit()
 
     frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
-    reset_link = f"{frontend_url}/reset-password?token={token}"
+    reset_link = f"{frontend_url}/password-reset?token={token}"
 
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
@@ -78,13 +87,7 @@ def request_password_reset(reset_request: PasswordResetRequest, db: Session = De
             "This link expires in 1 hour."
         )
 
-        try:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
-                server.send_message(msg)
-        except Exception:
-            logger.exception("Failed to send password reset email")
+        background_tasks.add_task(send_email_background, smtp_host, smtp_port, smtp_user, smtp_password, msg)
 
     return PasswordResetResponse(
         message="If the email exists, a password reset link has been sent."
@@ -125,6 +128,12 @@ def confirm_password_reset(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
+        )
+        
+    if len(reset_confirm.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters long"
         )
 
     # Update user password

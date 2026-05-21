@@ -98,18 +98,18 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Bike is not available for booking"
         )
-    #checking if the same bike is already booked for the requested time range
-    overlapping_booking = db.query(Booking).filter(
+    # checking if the bike has enough capacity for the requested time range
+    conflicting_bookings = db.query(Booking).filter(
         Booking.bike_id == booking.bike_id,
         Booking.status.in_(["pending", "confirmed", "paid"]),
         Booking.start_time < end_time,
         Booking.end_time > start_time
-    ).first()
+    ).count()
 
-    if overlapping_booking:
+    if conflicting_bookings >= inventory.available_quantity:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid booking time range"
+            detail="Bike is fully booked for the requested time range"
         )
     if start_time < tz.now():
         raise HTTPException(
@@ -124,10 +124,6 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
         status="pending",
         total_price=calculate_booking_price(bike, start_time, end_time),
     )
-
-    # Update inventory
-    inventory.available_quantity -= 1
-    inventory.rented_quantity += 1
 
     db.add(db_booking)
     db.commit()
@@ -247,17 +243,19 @@ def update_booking(booking_id: int, booking_update: BookingUpdate, current_user:
             detail="Booking end time must be after the start time"
         )
 
-    overlapping_booking = db.query(Booking).filter(
+    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).with_for_update().first()
+    conflicting_bookings = db.query(Booking).filter(
         Booking.bike_id == booking.bike_id,
         Booking.id != booking.id,
         Booking.status.in_(["pending", "confirmed", "paid"]),
         Booking.start_time < new_end_time,
         Booking.end_time > new_start_time
-    ).first()
-    if overlapping_booking:
+    ).count()
+    
+    if not inventory or conflicting_bookings >= inventory.available_quantity:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bike is already booked for the requested time range"
+            detail="Bike is fully booked for the requested time range"
         )
 
     bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
@@ -300,11 +298,6 @@ def cancel_booking(booking_id: int, current_user: User = Depends(get_current_use
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Paid bookings must be cancelled through the refund flow"
             )
-
-    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
-    if inventory:
-        inventory.available_quantity += 1
-        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
 
     booking.status = "cancelled"
     db.commit()
@@ -372,12 +365,6 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
             detail=f"Cannot reject booking with status '{booking.status}'. Only pending bookings can be rejected."
         )
     
-    # Return inventory when booking is rejected
-    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
-    if inventory:
-        inventory.available_quantity += 1
-        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
-    
     booking.status = "cancelled"
     db.commit()
     db.refresh(booking)
@@ -403,11 +390,7 @@ def complete_booking(booking_id: int, current_user: User = Depends(get_current_u
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot complete booking with status '{booking.status}'. Only confirmed or paid bookings can be completed."
         )
-    # Return inventory when booking is completed
-    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
-    if inventory:
-        inventory.available_quantity += 1
-        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
+        
     booking.status = "completed"
     booking.completed_at = tz.now()
     db.commit()
@@ -435,12 +418,6 @@ def return_booking(booking_id: int, current_user: User = Depends(get_current_use
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot mark booking as returned with status '{booking.status}'. Only confirmed, paid, or completed bookings can be returned."
         )
-    
-    # Return inventory when booking is returned
-    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
-    if inventory:
-        inventory.available_quantity += 1
-        inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
     
     booking.status = "returned"
     db.commit()

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -29,10 +29,19 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+def send_email_background(host: str, port: int, user: str, password: str, msg: EmailMessage):
+    try:
+        with smtplib.SMTP(host, port, timeout=10) as server:
+            server.starttls()
+            server.login(user, password)
+            server.send_message(msg)
+    except Exception:
+        logger.exception("Failed to send email")
+
 
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
-def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db)):
+def create_user(request: Request, user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Create a new user (customer or shop_owner)"""
     try:
         normalized_email = user.email.strip().lower()
@@ -46,6 +55,12 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
+            )
+            
+        if len(user.password) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 8 characters long"
             )
 
         # Hash the password (handles long passwords automatically)
@@ -96,13 +111,7 @@ def create_user(request: Request, user: UserCreate, db: Session = Depends(get_db
                 "This link expires in 24 hours."
             )
 
-            try:
-                with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                    server.starttls()
-                    server.login(smtp_user, smtp_password)
-                    server.send_message(msg)
-            except Exception:
-                logger.exception("Failed to send verification email")
+            background_tasks.add_task(send_email_background, smtp_host, smtp_port, smtp_user, smtp_password, msg)
 
         return db_user
 
@@ -155,7 +164,7 @@ def verify_email(payload: EmailVerificationRequest, db: Session = Depends(get_db
 
 @router.post("/verify-email/resend", response_model=EmailVerificationResponse, status_code=status.HTTP_200_OK)
 @limiter.limit("1/30 seconds")
-def resend_verification(request: Request, payload: EmailVerificationResend, db: Session = Depends(get_db)):
+def resend_verification(request: Request, payload: EmailVerificationResend, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Resend verification email."""
     normalized_email = payload.email.strip().lower()
     user = db.query(User).filter(func.lower(func.trim(User.email)) == normalized_email).first()
@@ -200,13 +209,7 @@ def resend_verification(request: Request, payload: EmailVerificationResend, db: 
             "This link expires in 24 hours."
         )
 
-        try:
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=10) as server:
-                server.starttls()
-                server.login(smtp_user, smtp_password)
-                server.send_message(msg)
-        except Exception:
-            logger.exception("Failed to send verification email")
+        background_tasks.add_task(send_email_background, smtp_host, smtp_port, smtp_user, smtp_password, msg)
 
     return EmailVerificationResponse(message="If the email exists, a verification link has been sent.")
 

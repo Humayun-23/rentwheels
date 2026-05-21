@@ -28,7 +28,7 @@ def create_review(shop_id: int, review: ReviewCreate, current_user: User = Depen
     .join(Bike, Booking.bike_id == Bike.id)
     .filter(
         Booking.customer_id == current_user.id,
-        Booking.status == "completed",
+        Booking.status.in_(["completed", "returned"]),
         Bike.shop_id == shop_id,  
     )
     .first()

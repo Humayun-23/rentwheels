@@ -260,18 +260,12 @@ def refund_payment(payload: RefundCreate, current_user: User = Depends(get_curre
         },
     )
 
-    previous_booking_status = booking.status
     db_payment.refund_id = refund_data.get("id")
     db_payment.refunded_amount = (db_payment.refunded_amount or 0) + refund_amount
     db_payment.status = "refunded" if db_payment.refunded_amount >= db_payment.amount else "refund_pending"
     db_payment.updated_at = tz.now()
     booking.status = "refunded" if db_payment.status == "refunded" else "refund_pending"
     booking.updated_at = tz.now()
-    if db_payment.status == "refunded" and previous_booking_status != "refunded":
-        inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
-        if inventory:
-            inventory.available_quantity += 1
-            inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
     db.commit()
     db.refresh(db_payment)
     return db_payment
@@ -323,14 +317,9 @@ async def razorpay_webhook(
                 db_payment.status = "refunded" if db_payment.refunded_amount >= db_payment.amount else "refund_pending"
                 db_payment.updated_at = tz.now()
                 if booking:
-                    previous_booking_status = booking.status
-                    booking.status = "refunded" if db_payment.status == "refunded" else "refund_pending"
-                    booking.updated_at = tz.now()
-                    if db_payment.status == "refunded" and previous_booking_status != "refunded":
-                        inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).first()
-                        if inventory:
-                            inventory.available_quantity += 1
-                            inventory.rented_quantity = max(0, inventory.rented_quantity - 1)
+                    if booking.status not in {"cancelled", "rejected"}:
+                        booking.status = "refunded" if db_payment.status == "refunded" else "refund_pending"
+                        booking.updated_at = tz.now()
                 db.commit()
 
     return {"status": "ok"}
