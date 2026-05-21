@@ -38,4 +38,4 @@ class BookingUpdate(BaseModel):
 
 class BookingOut(Booking):
     magic_token: str | None = None
-    pass
+    model_config = ConfigDict(from_attributes=True)
