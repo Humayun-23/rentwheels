@@ -16,9 +16,9 @@ DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_pa
 # - General Purpose D2s: pool_size=10-15, max_overflow=5
 # - Memory Optimized E2s: pool_size=20+, max_overflow=10
 
-POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "5"))  # ✅ FIXED: Reduced for Azure
-MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "3"))
-POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "600"))  # ✅ FIXED: 10 min for Azure timeout
+POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "15"))  # ✅ FIXED: Reduced for Azure
+MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "280"))  # ✅ FIXED: 10 min for Azure timeout
 POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))  # Wait up to 30s for connection
 
 engine = create_engine(

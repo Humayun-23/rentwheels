@@ -1,3 +1,4 @@
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -51,7 +52,7 @@ app.add_middleware(
     expose_headers=["Content-Length", "X-Total-Count"],
     max_age=600,  # Cache preflight requests for 10 minutes
 )
-
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Include routers
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
