@@ -1,4 +1,6 @@
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.utils import tz
 
@@ -123,6 +125,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
         end_time=end_time,
         status="pending",
         total_price=calculate_booking_price(bike, start_time, end_time),
+        magic_token=secrets.token_urlsafe(16),
     )
 
     db.add(db_booking)
@@ -423,3 +426,40 @@ def return_booking(booking_id: int, current_user: User = Depends(get_current_use
     db.commit()
     db.refresh(booking)
     return booking
+
+@router.get("/{booking_id}/magic-action", response_class=HTMLResponse)
+def magic_action(booking_id: int, action: str, token: str, db: Session = Depends(get_db)):
+    """Handle Magic Links for WhatsApp quick actions (no auth required)."""
+    booking = db.query(Booking).filter(Booking.id == booking_id).first()
+    
+    def render_html(emoji, title, message, color="#374151"):
+        return f"""
+        <html>
+            <body style="font-family: system-ui, sans-serif; text-align: center; background-color: #f3f4f6; padding: 2rem;">
+                <div style="max-width: 400px; margin: 0 auto; background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <div style="font-size: 4rem; margin-bottom: 1rem;">{emoji}</div>
+                    <h1 style="color: {color}; margin-top: 0;">{title}</h1>
+                    <p style="color: #6b7280; font-size: 1.1rem;">{message}</p>
+                </div>
+            </body>
+        </html>
+        """
+        
+    if not booking:
+        return render_html("❌", "Not Found", "We couldn't find this booking in the system.")
+    if not getattr(booking, "magic_token", None) or booking.magic_token != token:
+        return render_html("🔒", "Invalid Link", "This magic link is invalid or has expired.")
+    if booking.status != "pending":
+        return render_html("⚠️", "Already Processed", f"This booking was already marked as {booking.status.upper()}.")
+        
+    if action == "confirm":
+        booking.status = "confirmed"
+        booking.confirmed_at = tz.now()
+        db.commit()
+        return render_html("✅", "Booking Confirmed!", "The customer has been notified and can now pay.", "#10b981")
+    elif action == "reject":
+        booking.status = "cancelled"
+        db.commit()
+        return render_html("⛔", "Booking Rejected", "The booking has been cancelled successfully.", "#ef4444")
+        
+    return render_html("❓", "Unknown Action", "We didn't understand that action.")

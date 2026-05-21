@@ -37,4 +37,5 @@ class BookingUpdate(BaseModel):
 
 
 class BookingOut(Booking):
+    magic_token: str | None = None
     pass

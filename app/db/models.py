@@ -125,6 +125,7 @@ class Booking(Base):
     bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, index=True)
     start_time = Column(DateTime, nullable=False)
     end_time = Column(DateTime, nullable=False)
+    magic_token = Column(String(32), nullable=True)
     status = Column(String, nullable=False, default="pending")  # "pending", "confirmed", "completed", "cancelled"
     total_price = Column(Integer, nullable=True)  # Price in inr
     created_at = Column(DateTime, default=tz.now)
