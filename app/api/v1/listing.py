@@ -11,6 +11,13 @@ router = APIRouter(prefix="/bikes", tags=["bikes"])
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
+def optimize_cloudinary_url(url: str, width: int = 800) -> str:
+    """Inject Cloudinary optimization flags (q_auto, f_auto) and resize."""
+    if url and "cloudinary.com" in url and "/upload/" in url:
+        parts = url.split("/upload/")
+        return f"{parts[0]}/upload/q_auto,f_auto,w_{width}/{parts[1]}"
+    return url
+
 @router.post("/", response_model=BikeOut, status_code=status.HTTP_201_CREATED)
 def create_bike(bike: BikeCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create a new bike (shop owners only)"""
@@ -238,6 +245,7 @@ def upload_bike_images(
             )
 
         image_url = upload_image(file, folder=f"bikes/{bike_id}")
+        image_url = optimize_cloudinary_url(image_url)
         db.add(BikeImage(bike_id=bike_id, image_url=image_url))
 
     db.commit()

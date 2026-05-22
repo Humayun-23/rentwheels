@@ -175,6 +175,9 @@ def list_bookings(
             .limit(limit)
             .all()
         )
+        
+    if current_user.user_type == "admin":
+        return db.query(Booking).offset(skip).limit(limit).all()
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,

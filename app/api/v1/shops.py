@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.db.database import get_db
-from app.db.models import Shop, User, ShopImage
+from app.db.models import Shop, User, ShopImage, Bike, Booking, Review
 from app.schemas.shops import ShopCreate, ShopUpdate, ShopOut
 from app.api.v1.oauth2 import get_current_user
 from app.utils.cloudinary_client import upload_image
@@ -10,6 +11,13 @@ router = APIRouter(prefix="/shops", tags=["shops"])
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
+
+def optimize_cloudinary_url(url: str, width: int = 800) -> str:
+    """Inject Cloudinary optimization flags (q_auto, f_auto) and resize."""
+    if url and "cloudinary.com" in url and "/upload/" in url:
+        parts = url.split("/upload/")
+        return f"{parts[0]}/upload/q_auto,f_auto,w_{width}/{parts[1]}"
+    return url
 
 @router.post("/", response_model=ShopOut, status_code=status.HTTP_201_CREATED)
 def create_shop(shop: ShopCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -29,6 +37,56 @@ def create_shop(shop: ShopCreate, current_user: User = Depends(get_current_user)
     db.refresh(db_shop)
     return db_shop
 
+
+@router.get("/dashboard-metrics")
+def get_dashboard_metrics(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get aggregated metrics for the dashboard to avoid N+1 frontend queries"""
+    if current_user.user_type not in ["shop_owner", "admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    is_admin = current_user.user_type == "admin"
+    
+    my_shop_ids = db.query(Shop.id).filter(Shop.owner_id == current_user.id)
+    my_bike_ids = db.query(Bike.id).filter(Bike.shop_id.in_(my_shop_ids))
+
+    # 1. Total Vehicles
+    if is_admin:
+        total_bikes = db.query(func.count(Bike.id)).scalar() or 0
+    else:
+        total_bikes = db.query(func.count(Bike.id)).filter(Bike.shop_id.in_(my_shop_ids)).scalar() or 0
+
+    # 2. Active Bookings
+    active_q = db.query(func.count(Booking.id)).filter(Booking.status.in_(["pending", "confirmed"]))
+    if not is_admin:
+        active_q = active_q.filter(Booking.bike_id.in_(my_bike_ids))
+    active_bookings = active_q.scalar() or 0
+
+    # 3. Revenue
+    rev_q = db.query(func.sum(Booking.total_price)).filter(Booking.status.in_(["completed", "returned", "paid"]))
+    if not is_admin:
+        rev_q = rev_q.filter(Booking.bike_id.in_(my_bike_ids))
+    revenue = rev_q.scalar() or 0
+
+    # 4. Avg Rating
+    reviews_q = db.query(func.avg(Review.rating))
+    if not is_admin:
+        reviews_q = reviews_q.filter(Review.shop_id.in_(my_shop_ids))
+    avg_rating = reviews_q.scalar()
+    avg_rating = round(float(avg_rating), 1) if avg_rating else 0
+
+    # 5. Recent Reviews
+    recent_reviews_q = db.query(Review)
+    if not is_admin:
+        recent_reviews_q = recent_reviews_q.filter(Review.shop_id.in_(my_shop_ids))
+    recent_reviews = recent_reviews_q.order_by(Review.created_at.desc()).limit(5).all()
+
+    return {
+        "total_bikes": total_bikes,
+        "active_bookings": active_bookings,
+        "revenue": revenue,
+        "avg_rating": avg_rating,
+        "recent_reviews": recent_reviews
+    }
 
 @router.get("/me", response_model=list[ShopOut])
 def get_my_shops(
@@ -159,6 +217,7 @@ def upload_shop_image(
         )
 
     image_url = upload_image(file, folder=f"shops/{shop_id}")
+    image_url = optimize_cloudinary_url(image_url)
 
     existing = db.query(ShopImage).filter(ShopImage.shop_id == shop_id).first()
     if existing:
