@@ -118,14 +118,19 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking start time must be in the future"
         )
+        
+    print("🚨 PYTHON SEES THESE COLUMNS IN MEMORY:", Booking.__table__.columns.keys())
+    
     db_booking = Booking(
         customer_id=current_user.id,
         bike_id=booking.bike_id,
         start_time=start_time,
         end_time=end_time,
-        status="pending",
+        status="confirmed",
         total_price=calculate_booking_price(bike, start_time, end_time),
         magic_token=secrets.token_urlsafe(16),
+        utr_number=getattr(booking, "utr_number", None),
+        token_amount=299,
     )
 
     db.add(db_booking)
@@ -364,11 +369,11 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
         # Verify that the current user owns the shop
     verify_shop_ownership(booking, current_user, db, "reject")
     
-    # Only pending bookings can be rejected
-    if booking.status != "pending":
+    # Allow rejecting pending OR confirmed bookings (to veto fake UTR payments)
+    if booking.status not in ["pending", "confirmed"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot reject booking with status '{booking.status}'. Only pending bookings can be rejected."
+            detail=f"Cannot reject booking with status '{booking.status}'."
         )
     
     booking.status = "cancelled"
@@ -452,17 +457,13 @@ def magic_action(booking_id: int, action: str, token: str, db: Session = Depends
         return render_html("❌", "Not Found", "We couldn't find this booking in the system.")
     if not getattr(booking, "magic_token", None) or booking.magic_token != token:
         return render_html("🔒", "Invalid Link", "This magic link is invalid or has expired.")
-    if booking.status != "pending":
-        return render_html("⚠️", "Already Processed", f"This booking was already marked as {booking.status.upper()}.")
         
-    if action == "confirm":
-        booking.status = "confirmed"
-        booking.confirmed_at = tz.now()
-        db.commit()
-        return render_html("✅", "Booking Confirmed!", "The customer has been notified and can now pay.", "#10b981")
-    elif action == "reject":
+    if booking.status == "cancelled":
+        return render_html("⚠️", "Already Cancelled", "This booking has already been cancelled.")
+
+    if action == "reject":
         booking.status = "cancelled"
         db.commit()
-        return render_html("⛔", "Booking Rejected", "The booking has been cancelled successfully.", "#ef4444")
+        return render_html("⛔", "Payment Rejected", "The booking has been cancelled and the customer has been flagged for fake payment.", "#ef4444")
         
     return render_html("❓", "Unknown Action", "We didn't understand that action.")

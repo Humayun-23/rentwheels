@@ -34,6 +34,7 @@ class Shop(Base):
     description = Column(String, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
+    upi_id = Column(String(50), nullable=True)
     address = Column(String, nullable=False)
     city = Column(String, nullable=False)
     state = Column(String, nullable=True)
@@ -127,6 +128,8 @@ class Booking(Base):
     end_time = Column(DateTime, nullable=False)
     magic_token = Column(String(32), nullable=True)
     status = Column(String, nullable=False, default="pending")  # "pending", "confirmed", "completed", "cancelled"
+    utr_number = Column(String(12), nullable=True)
+    token_amount = Column(Integer, nullable=True) 
     total_price = Column(Integer, nullable=True)  # Price in inr
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)

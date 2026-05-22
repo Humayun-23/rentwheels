@@ -148,7 +148,7 @@ def update_shop(shop_id: int, shop_update: ShopUpdate, current_user: User = Depe
             detail=f"Shop with ID {shop_id} not found"
         )
     
-    if shop.owner_id != current_user.id:
+    if shop.owner_id != current_user.id and current_user.user_type != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own shop"
@@ -173,7 +173,7 @@ def delete_shop(shop_id: int, current_user: User = Depends(get_current_user), db
             detail=f"Shop with ID {shop_id} not found"
         )
     
-    if shop.owner_id != current_user.id:
+    if shop.owner_id != current_user.id and current_user.user_type != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete your own shop"
@@ -210,7 +210,7 @@ def upload_shop_image(
             detail=f"Shop with ID {shop_id} not found",
         )
 
-    if shop.owner_id != current_user.id:
+    if shop.owner_id != current_user.id and current_user.user_type != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own shop",

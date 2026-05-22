@@ -13,12 +13,14 @@ class ShopCreate(BaseModel):
     zip_code: Optional[str] = None
     opening_time: Optional[time] = None
     closing_time: Optional[time] = None
+    upi_id: Optional[str] = Field(None, max_length=50)
     is_active: bool = True
     # Note: owner_id is automatically set from the authenticated user in the endpoint
 
 
 class Shop(ShopCreate):
     id: int
+    upi_id: str | None = Field(None, max_length=50)
     created_at: datetime
     updated_at: datetime
     
@@ -35,6 +37,7 @@ class ShopUpdate(BaseModel):
     zip_code: Optional[str] = None
     opening_time: Optional[time] = None
     closing_time: Optional[time] = None
+    upi_id: Optional[str] = Field(None, max_length=50)
     is_active: Optional[bool] = None
 
 class ShopImage(BaseModel):
@@ -46,6 +49,7 @@ class ShopImage(BaseModel):
 
 class ShopOut(Shop):
     image: list[ShopImage] = []
+    upi_id: str | None = Field(None, max_length=50)
 
     @computed_field
     @property

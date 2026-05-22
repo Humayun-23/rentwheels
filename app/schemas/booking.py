@@ -1,12 +1,14 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from datetime import datetime
 from typing import Optional, Literal
 
 
 class BookingCreate(BaseModel):
     bike_id: int
+    utr_number: str = Field(..., min_length=12, max_length=12, description="12-digit UPI transaction reference")
     start_time: datetime
     end_time: datetime
+    
     # Note: customer_id is automatically set from the authenticated user
 
 
@@ -38,4 +40,6 @@ class BookingUpdate(BaseModel):
 
 class BookingOut(Booking):
     magic_token: str | None = None
+    utr_number: str = Field(..., min_length=12, max_length=12, description="12-digit UPI transaction reference")
+    token_amount: int | None = None
     model_config = ConfigDict(from_attributes=True)
