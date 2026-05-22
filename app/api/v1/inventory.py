@@ -66,7 +66,7 @@ def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depend
 
 
 @router.get("/bike/{bike_id}", response_model=BikeInventoryOut)
-def get_inventory_by_bike(bike_id: int, db: Session = Depends(get_db)):
+def get_inventory_by_bike(bike_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get inventory status for a specific bike"""
     inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == bike_id).first()
 
@@ -74,6 +74,20 @@ def get_inventory_by_bike(bike_id: int, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"No inventory found for bike {bike_id}"
+        )
+
+    # Verify ownership
+    bike = db.query(Bike).filter(Bike.id == bike_id).first()
+    if not bike:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bike with ID {bike_id} not found"
+        )
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view inventory for this bike"
         )
 
     return inventory
@@ -84,6 +98,7 @@ def get_shop_inventory(
     shop_id: int,
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Get all bike inventory in a shop with pagination"""
@@ -93,6 +108,13 @@ def get_shop_inventory(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Shop with ID {shop_id} not found"
+        )
+        
+    # Verify ownership
+    if shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view inventory for this shop"
         )
 
     # Get all bikes in this shop with their inventory
@@ -142,13 +164,18 @@ def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current
 
     # Verify ownership: check if the current user owns the shop that owns this bike
     bike = db.query(Bike).filter(Bike.id == bike_id).first()
-    if bike:
-        shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-        if not shop or shop.owner_id != current_user.id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to update inventory for this bike"
-            )
+    if not bike:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Bike with ID {bike_id} not found"
+        )
+        
+    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop or shop.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to update inventory for this bike"
+        )
 
     # Update total quantity
     old_total = inventory.total_quantity

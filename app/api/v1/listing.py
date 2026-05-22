@@ -133,6 +133,11 @@ def update_bike(bike_id: int, bike_update: BikeUpdate, current_user: User = Depe
         )
     
     shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Shop for this bike not found"
+        )
     if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -159,6 +164,11 @@ def delete_bike(bike_id: int, current_user: User = Depends(get_current_user), db
         )
     
     shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Shop for this bike not found"
+        )
     if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -185,6 +195,11 @@ def upload_bike_images(
         )
 
     shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Shop for this bike not found"
+        )
     if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

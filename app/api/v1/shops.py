@@ -30,20 +30,6 @@ def create_shop(shop: ShopCreate, current_user: User = Depends(get_current_user)
     return db_shop
 
 
-@router.get("/{shop_id}", response_model=ShopOut)
-def get_shop(shop_id: int, db: Session = Depends(get_db)):
-    """Get a shop by ID"""
-    shop = db.query(Shop).filter(Shop.id == shop_id).first()
-    
-    if not shop:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Shop with ID {shop_id} not found"
-        )
-    
-    return shop
-
-
 @router.get("/me", response_model=list[ShopOut])
 def get_my_shops(
     skip: int = Query(0, ge=0, description="Number of records to skip"),
@@ -66,6 +52,20 @@ def get_my_shops(
         .all()
     )
     return shops
+
+
+@router.get("/{shop_id}", response_model=ShopOut)
+def get_shop(shop_id: int, db: Session = Depends(get_db)):
+    """Get a shop by ID"""
+    shop = db.query(Shop).filter(Shop.id == shop_id).first()
+    
+    if not shop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Shop with ID {shop_id} not found"
+        )
+    
+    return shop
 
 
 @router.get("/", response_model=list[ShopOut])
