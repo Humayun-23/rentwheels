@@ -118,19 +118,20 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Booking start time must be in the future"
         )
-        
-    print("🚨 PYTHON SEES THESE COLUMNS IN MEMORY:", Booking.__table__.columns.keys())
     
+    total_price = calculate_booking_price(bike, start_time, end_time)
+    token_amount = max(299, int(total_price * 0.10))
+
     db_booking = Booking(
         customer_id=current_user.id,
         bike_id=booking.bike_id,
         start_time=start_time,
         end_time=end_time,
         status="confirmed",
-        total_price=calculate_booking_price(bike, start_time, end_time),
+        total_price=total_price,
         magic_token=secrets.token_urlsafe(16),
         utr_number=getattr(booking, "utr_number", None),
-        token_amount=299,
+        token_amount=token_amount,
     )
 
     db.add(db_booking)
