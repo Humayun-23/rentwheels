@@ -28,9 +28,10 @@ def verify_access_token(token: str, credentials_exception):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: int | None = payload.get("user_id")
+        role: str | None = payload.get("role")
         if user_id is None:
             raise credentials_exception
-        token_data = TokenData(user_id=user_id)
+        token_data = TokenData(user_id=user_id, role=role)
     except jwt.InvalidTokenError:
         raise credentials_exception
     return token_data
@@ -43,6 +44,14 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         headers={"WWW-Authenticate": "Bearer"}
     )
     token_data = verify_access_token(token, credentials_exception)
+    
+    # Security constraint: only tokens generated for 'user' or tokens without a role (backward compat) can access user endpoints
+    if token_data.role is not None and token_data.role != "user":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token role does not have permission to access this resource"
+        )
+        
     user = db.query(User).filter(User.id == token_data.user_id).first()
 
     if not user:
