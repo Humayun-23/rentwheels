@@ -2,6 +2,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import PlainTextResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -85,8 +86,12 @@ def api_info():
         "docs": "/docs"
     }
 
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    # Disallow all bots on the API domain
+    content = "User-agent: *\nDisallow: /"
+    return PlainTextResponse(content=content)
 
-# Startup and shutdown hooks
 @app.on_event("startup")
 async def startup_event():
     """Verify database connection on startup (optional for development)"""
