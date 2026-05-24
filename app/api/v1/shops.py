@@ -41,43 +41,34 @@ def create_shop(shop: ShopCreate, current_user: User = Depends(get_current_user)
 @router.get("/dashboard-metrics")
 def get_dashboard_metrics(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Get aggregated metrics for the dashboard to avoid N+1 frontend queries"""
-    if current_user.user_type not in ["shop_owner", "admin"]:
+    if current_user.user_type not in ["shop_owner"]:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    is_admin = current_user.user_type == "admin"
-    
     my_shop_ids = db.query(Shop.id).filter(Shop.owner_id == current_user.id)
     my_bike_ids = db.query(Bike.id).filter(Bike.shop_id.in_(my_shop_ids))
 
     # 1. Total Vehicles
-    if is_admin:
-        total_bikes = db.query(func.count(Bike.id)).scalar() or 0
-    else:
-        total_bikes = db.query(func.count(Bike.id)).filter(Bike.shop_id.in_(my_shop_ids)).scalar() or 0
+    total_bikes = db.query(func.count(Bike.id)).filter(Bike.shop_id.in_(my_shop_ids)).scalar() or 0
 
     # 2. Active Bookings
     active_q = db.query(func.count(Booking.id)).filter(Booking.status.in_(["pending", "confirmed"]))
-    if not is_admin:
-        active_q = active_q.filter(Booking.bike_id.in_(my_bike_ids))
+    active_q = active_q.filter(Booking.bike_id.in_(my_bike_ids))
     active_bookings = active_q.scalar() or 0
 
     # 3. Revenue
     rev_q = db.query(func.sum(Booking.total_price)).filter(Booking.status.in_(["completed", "returned", "paid"]))
-    if not is_admin:
-        rev_q = rev_q.filter(Booking.bike_id.in_(my_bike_ids))
+    rev_q = rev_q.filter(Booking.bike_id.in_(my_bike_ids))
     revenue = rev_q.scalar() or 0
 
     # 4. Avg Rating
     reviews_q = db.query(func.avg(Review.rating))
-    if not is_admin:
-        reviews_q = reviews_q.filter(Review.shop_id.in_(my_shop_ids))
+    reviews_q = reviews_q.filter(Review.shop_id.in_(my_shop_ids))
     avg_rating = reviews_q.scalar()
     avg_rating = round(float(avg_rating), 1) if avg_rating else 0
 
     # 5. Recent Reviews
     recent_reviews_q = db.query(Review)
-    if not is_admin:
-        recent_reviews_q = recent_reviews_q.filter(Review.shop_id.in_(my_shop_ids))
+    recent_reviews_q = recent_reviews_q.filter(Review.shop_id.in_(my_shop_ids))
     recent_reviews = recent_reviews_q.order_by(Review.created_at.desc()).limit(5).all()
 
     return {
@@ -148,7 +139,7 @@ def update_shop(shop_id: int, shop_update: ShopUpdate, current_user: User = Depe
             detail=f"Shop with ID {shop_id} not found"
         )
     
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own shop"
@@ -173,7 +164,7 @@ def delete_shop(shop_id: int, current_user: User = Depends(get_current_user), db
             detail=f"Shop with ID {shop_id} not found"
         )
     
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete your own shop"
@@ -210,7 +201,7 @@ def upload_shop_image(
             detail=f"Shop with ID {shop_id} not found",
         )
 
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update your own shop",

@@ -14,7 +14,7 @@ router = APIRouter(prefix="/inventory", tags=["inventory"])
 @router.post("/", response_model=BikeInventoryOut, status_code=status.HTTP_201_CREATED)
 def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create inventory record for a bike"""
-    if current_user.user_type not in ["shop_owner", "admin"]:
+    if current_user.user_type not in ["shop_owner"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only shop owners can create inventory records"
@@ -30,7 +30,7 @@ def create_inventory(inventory: BikeInventoryCreate, current_user: User = Depend
 
     # Check if the current user owns the shop that owns this bike
     shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or (shop.owner_id != current_user.id and current_user.user_type != "admin"):
+    if not shop or (shop.owner_id != current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to create inventory for this bike"
@@ -83,7 +83,7 @@ def get_inventory_by_bike(bike_id: int, current_user: User = Depends(get_current
             detail=f"Bike with ID {bike_id} not found"
         )
     shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or (shop.owner_id != current_user.id and current_user.user_type != "admin"):
+    if not shop or (shop.owner_id != current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view inventory for this bike"
@@ -110,7 +110,7 @@ def get_shop_inventory(
         )
         
     # Verify ownership
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view inventory for this shop"
@@ -146,7 +146,7 @@ def check_availability(bike_id: int, db: Session = Depends(get_db)):
 @router.put("/{bike_id}", response_model=BikeInventoryOut)
 def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update total quantity for a bike"""
-    if current_user.user_type not in ["shop_owner", "admin"]:
+    if current_user.user_type not in ["shop_owner"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only shop owners can update inventory records"
@@ -169,7 +169,7 @@ def update_inventory(bike_id: int, inventory_update: BikeInventoryUpdate,current
         )
         
     shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or (shop.owner_id != current_user.id and current_user.user_type != "admin"):
+    if not shop or (shop.owner_id != current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to update inventory for this bike"

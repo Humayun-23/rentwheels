@@ -45,7 +45,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     )
     token_data = verify_access_token(token, credentials_exception)
     
-    # Security constraint: only tokens generated for 'user' or tokens without a role (backward compat) can access user endpoints
+    # Security constraint: only tokens generated for 'user' can access user endpoints
     if token_data.role is not None and token_data.role != "user":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -58,51 +58,3 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
 
     return user
-
-
-def require_admin_token(request: Request):
-    """Dependency to protect operator-only admin endpoints.
-
-    Checks that the request comes from an allowed host (handles Azure reverse proxy)
-    and that the Authorization header contains the ADMIN token from settings.
-    """
-    # Ensure admin token is configured
-    if not settings.admin_token:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Admin token not configured on server"
-        )
-
-    # Extract real client IP (handles reverse proxy/load balancer scenarios like Azure)
-    # Use the last IP in X-Forwarded-For because nginx appends the real client IP.
-    x_forwarded_for = request.headers.get("X-Forwarded-For", "").strip()
-    if x_forwarded_for:
-        client_ip = x_forwarded_for.split(",")[-1].strip()
-    else:
-        # Fallback to direct client IP
-        client = request.client
-        client_ip = client.host if client else None
-    
-    # Check against allowed hosts
-    allowed = [h.strip() for h in settings.admin_allowed_hosts.split(",") if h.strip()]
-    if client_ip not in allowed and client_ip != "127.0.0.1" and client_ip != "localhost":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Admin access not allowed from {client_ip}"
-        )
-
-    auth = request.headers.get("Authorization")
-    if not auth or not auth.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing admin token"
-        )
-
-    token = auth.split(" ", 1)[1].strip()
-    if token != settings.admin_token:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid admin token"
-        )
-
-    return True

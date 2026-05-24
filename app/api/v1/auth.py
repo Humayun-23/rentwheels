@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from app.utils.limiter import limiter
 from app.db.database import get_db
-from app.db.models import AdminUser, User
+from app.db.models import User
 from app.schemas.token import Token
 from app.api.v1.oauth2 import create_access_token
 from app.utils.utils import verify_password
@@ -29,19 +29,4 @@ def login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depend
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Email not verified")
 
     access_token = create_access_token(data={"user_id": user.id, "role": "user"})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@router.post('/admin/login', response_model=Token)
-@limiter.limit("5/minute")
-def admin_login(request: Request, user_credentials: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    """Admin login endpoint - returns JWT token for admin users"""
-    user = db.query(AdminUser).filter(AdminUser.email == user_credentials.username).first()
-
-    if not user:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
-    
-    if not verify_password(user_credentials.password, user.password):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid Credentials")
-
-    access_token = create_access_token(data={"user_id": user.id, "role": "admin"})
     return {"access_token": access_token, "token_type": "bearer"}

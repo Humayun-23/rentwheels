@@ -21,7 +21,7 @@ def optimize_cloudinary_url(url: str, width: int = 800) -> str:
 @router.post("/", response_model=BikeOut, status_code=status.HTTP_201_CREATED)
 def create_bike(bike: BikeCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create a new bike (shop owners only)"""
-    if current_user.user_type not in ["shop_owner", "admin"]:
+    if current_user.user_type not in ["shop_owner"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only shop owners can add bikes"
@@ -35,7 +35,7 @@ def create_bike(bike: BikeCreate, current_user: User = Depends(get_current_user)
             detail=f"Shop with ID {bike.shop_id} not found"
         )
     
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only add bikes to your own shop"
@@ -145,7 +145,7 @@ def update_bike(bike_id: int, bike_update: BikeUpdate, current_user: User = Depe
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Shop for this bike not found"
         )
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update bikes in your shop"
@@ -176,7 +176,7 @@ def delete_bike(bike_id: int, current_user: User = Depends(get_current_user), db
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Shop for this bike not found"
         )
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete bikes from your shop"
@@ -207,7 +207,7 @@ def upload_bike_images(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Shop for this bike not found"
         )
-    if shop.owner_id != current_user.id and current_user.user_type != "admin":
+    if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only update bikes in your shop",

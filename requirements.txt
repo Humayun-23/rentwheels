@@ -38,3 +38,4 @@ better-exceptions==0.3.3
 # - If you prefer SQLite for local dev instead of Postgres, you can remove psycopg2-binary and use a SQLite URL.
 # - If you use async SQLAlchemy with Postgres, replace psycopg2-binary with asyncpg.
 # - Uvicorn[standard] includes uvloop and httptools for better performance on macOS/Linux.
+gunicorn==21.2.0

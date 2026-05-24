@@ -156,15 +156,7 @@ class Review(Base):
     shop = relationship("Shop", foreign_keys=[shop_id])
     customer = relationship("User", foreign_keys=[customer_id])
     
-class AdminUser(Base):
-    """AdminUser model - represents admin users of the system"""
-    __tablename__ = "admin_users"
 
-    id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    password = Column(String, nullable=False)
-    created_at = Column(DateTime, default=tz.now)
-    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
 
 class PasswordResetToken(Base):

@@ -16,11 +16,17 @@ class Settings(BaseSettings):
     database_name: str
     database_username: str
     secret_key: str
-    algorithm: str
+    algorithm: str = "HS256"
+
+    @field_validator("algorithm", mode="before")
+    @classmethod
+    def validate_algorithm(cls, v):
+        # Enforce HS256 to prevent JWT Algorithm Confusion attacks
+        if v != "HS256":
+            return "HS256"
+        return v
     access_token_expire_minutes: int
 
-    admin_token: str | None = None
-    admin_allowed_hosts: str = "127.0.0.1,::1"
     cors_origins: str = ""  # ← read as raw string, validator converts to list
 
     environment: str = "production"

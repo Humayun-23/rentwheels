@@ -11,7 +11,7 @@ import smtplib
 from email.message import EmailMessage
 import logging
 
-from app.api.v1.oauth2 import get_current_user, require_admin_token
+from app.api.v1.oauth2 import get_current_user
 from app.api.v1.oauth2 import create_access_token
 from app.db.database import get_db
 from app.db.models import User, EmailVerificationToken
@@ -280,14 +280,5 @@ def update_user(
         )
         
         
-@router.get("/", response_model=List[UserOut], include_in_schema=False)
-def get_all_users(
-    skip: int = Query(0, ge=0, description="Number of records to skip"),
-    limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
-    db: Session = Depends(get_db), 
-    _admin: bool = Depends(require_admin_token)
-):
-    """Get all users with pagination (operator-only admin endpoint). Hidden from OpenAPI docs and protected by ADMIN_TOKEN."""
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users
+
     
