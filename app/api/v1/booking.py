@@ -441,12 +441,14 @@ def magic_action(booking_id: int, action: str, token: str, db: Session = Depends
     """Handle Magic Links for WhatsApp quick actions (no auth required)."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
-    def render_html(emoji, title, message, color="#374151"):
+    def render_html(icon, icon_bg, title, message, color="#374151"):
         return f"""
         <html>
             <body style="font-family: system-ui, sans-serif; text-align: center; background-color: #f3f4f6; padding: 2rem;">
                 <div style="max-width: 400px; margin: 0 auto; background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                    <div style="font-size: 4rem; margin-bottom: 1rem;">{emoji}</div>
+                    <div style="width: 72px; height: 72px; border-radius: 50%; background: {icon_bg}; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem auto;">
+                        <span style="font-size: 2rem; font-weight: bold; color: white; line-height: 1;">{icon}</span>
+                    </div>
                     <h1 style="color: {color}; margin-top: 0;">{title}</h1>
                     <p style="color: #6b7280; font-size: 1.1rem;">{message}</p>
                 </div>
@@ -455,16 +457,16 @@ def magic_action(booking_id: int, action: str, token: str, db: Session = Depends
         """
         
     if not booking:
-        return render_html("❌", "Not Found", "We couldn't find this booking in the system.")
+        return render_html("&#10005;", "#ef4444", "Not Found", "We couldn't find this booking in the system.")
     if not getattr(booking, "magic_token", None) or booking.magic_token != token:
-        return render_html("🔒", "Invalid Link", "This magic link is invalid or has expired.")
+        return render_html("&#128274;", "#6b7280", "Invalid Link", "This magic link is invalid or has expired.")
         
     if booking.status == "cancelled":
-        return render_html("⚠️", "Already Cancelled", "This booking has already been cancelled.")
+        return render_html("!", "#f59e0b", "Already Cancelled", "This booking has already been cancelled.")
 
     if action == "reject":
         booking.status = "cancelled"
         db.commit()
-        return render_html("⛔", "Payment Rejected", "The booking has been cancelled and the customer has been flagged for fake payment.", "#ef4444")
+        return render_html("&#10005;", "#ef4444", "Payment Rejected", "The booking has been cancelled and the customer has been flagged for fake payment.", "#ef4444")
         
-    return render_html("❓", "Unknown Action", "We didn't understand that action.")
+    return render_html("?", "#6b7280", "Unknown Action", "We didn't understand that action.")
