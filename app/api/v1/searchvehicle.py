@@ -4,7 +4,7 @@ from sqlalchemy import and_, or_
 from typing import List, Optional, Literal
 
 from app.db.database import get_db
-from app.db.models import Bike, BikeInventory
+from app.db.models import Bike, BikeInventory, Shop
 from app.schemas.bikes import BikeOut
 
 router = APIRouter(prefix="/search", tags=["search"])
@@ -12,6 +12,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 @router.get("/vehicles", response_model=List[BikeOut])
 def search_vehicles(
+    q: Optional[str] = Query(None, description="Search query for name, model, or location"),
     vehicle_type: Optional[Literal["scooty", "bike", "car"]] = Query(None, description="Type of vehicle to search for"),
     engine_cc: Optional[int] = Query(None, description="Engine CC (e.g., 150, 250, 500)"),
     cc_min: Optional[int] = Query(None, description="Minimum engine CC"),
@@ -42,6 +43,18 @@ def search_vehicles(
     - GET /api/v1/search/vehicles?engine_cc=500&is_available=true&skip=0&limit=20
     """
     query = db.query(Bike)
+    
+    # Text search
+    if q:
+        search_pattern = f"%{q}%"
+        query = query.join(Shop).filter(
+            or_(
+                Bike.name.ilike(search_pattern),
+                Bike.model.ilike(search_pattern),
+                Shop.city.ilike(search_pattern),
+                Shop.address.ilike(search_pattern),
+            )
+        )
     
     # Filter by vehicle type
     if vehicle_type:
