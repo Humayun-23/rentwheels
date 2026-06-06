@@ -93,18 +93,6 @@ def robots_txt():
     content = "User-agent: *\nDisallow: /"
     return PlainTextResponse(content=content)
 
-async def keep_db_alive():
-    """Background task to ping DB every 4 minutes to prevent Neon cold starts"""
-    while True:
-        try:
-            await asyncio.sleep(240)  # 4 minutes
-            db = SessionLocal()
-            db.execute(text("SELECT 1"))
-            db.commit()
-            db.close()
-            logger.debug("✅ Database keep-alive ping successful")
-        except Exception as e:
-            logger.error(f"❌ Database keep-alive ping failed: {str(e)}")
 
 @app.on_event("startup")
 async def startup_event():
@@ -118,9 +106,6 @@ async def startup_event():
         logger.error(f"❌ Failed to connect to database at startup: {str(e)}")
         # Log warning but don't fail - DB will be checked on first API call
         logger.warning(f"⚠️ Database unavailable at startup. Connection will be retried on first request. Error: {str(e)}")
-    
-    # Start background keep-alive task
-    asyncio.create_task(keep_db_alive())
 
 
 @app.on_event("shutdown")
