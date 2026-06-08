@@ -12,6 +12,9 @@ COPY app /app/app
 COPY alembic /app/alembic
 COPY alembic.ini /app/alembic.ini
 
+# Create empty .env file to prevent slowapi/starlette FileNotFoundError
+RUN touch /app/.env
+
 EXPOSE 8000
 
 CMD ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--forwarded-allow-ips='*'"]
