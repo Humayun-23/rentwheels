@@ -89,8 +89,9 @@ def api_info():
 
 @app.get("/robots.txt", include_in_schema=False)
 def robots_txt():
-    # Disallow all bots on the API domain
-    content = "User-agent: *\nDisallow: /"
+    # Allow bots to crawl the API domain so Googlebot can render the frontend,
+    # specifically for endpoints fetched during client-side rendering.
+    content = "User-agent: *\nAllow: /"
     return PlainTextResponse(content=content)
 
 
