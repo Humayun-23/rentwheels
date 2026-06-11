@@ -13,7 +13,7 @@ import asyncio
 from app.utils.limiter import limiter
 from app.utils.logging_config import configure_logging, LoggingMiddleware
 from app.api.v1 import auth, reviews, users, shops, booking, listing, searchvehicle, passwordreset, payments
-from app.api.v1 import inventory
+from app.api.v1 import inventory, statistics
 from app.config import settings
 from app.db.database import get_db, SessionLocal
 
@@ -66,6 +66,7 @@ app.include_router(searchvehicle.router, prefix="/api/v1")
 app.include_router(reviews.router, prefix="/api/v1")
 app.include_router(passwordreset.router, prefix="/api/v1")
 app.include_router(payments.router, prefix="/api/v1")
+app.include_router(statistics.router, prefix="/api/v1")
 
 
 @app.get("/")
