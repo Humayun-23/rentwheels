@@ -40,3 +40,4 @@ better-exceptions==0.3.3
 # - Uvicorn[standard] includes uvloop and httptools for better performance on macOS/Linux.
 gunicorn==21.2.0
 google-auth
+requests
