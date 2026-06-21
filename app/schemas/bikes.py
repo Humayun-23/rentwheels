@@ -14,6 +14,7 @@ class BikeCreate(BaseModel):
     price_per_day: int   # Price in cents (e.g., 2500 = $25.00)
     condition: Literal["excellent", "good", "fair"] = "good"
     is_available: bool = True
+    maintenance_status: Optional[Literal["available", "maintenance", "repair", "cleaning"]] = "available"
 
 
 class Bike(BikeCreate):
@@ -34,6 +35,7 @@ class BikeUpdate(BaseModel):
     price_per_day: Optional[int] = None
     condition: Optional[Literal["excellent", "good", "fair"]] = None
     is_available: Optional[bool] = None
+    maintenance_status: Optional[Literal["available", "maintenance", "repair", "cleaning"]] = None
 
 class BikeImage(BaseModel):
     id: int
@@ -52,4 +54,16 @@ class BikeOut(Bike):
         if self.image:
             return self.image[0].image_url
         return None
+
+class ServiceLogCreate(BaseModel):
+    description: str
+    cost: int = 0
+    service_date: Optional[datetime] = None
+
+class ServiceLogOut(ServiceLogCreate):
+    id: int
+    bike_id: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 

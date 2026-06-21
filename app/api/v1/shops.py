@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, cast, Date
+from datetime import datetime, timedelta
 from app.db.database import get_db
 from app.db.models import Shop, User, ShopImage, Bike, Booking, Review
 from app.schemas.shops import ShopCreate, ShopUpdate, ShopOut
@@ -78,6 +79,75 @@ def get_dashboard_metrics(current_user: User = Depends(get_current_user), db: Se
         "avg_rating": avg_rating,
         "recent_reviews": recent_reviews
     }
+
+@router.get("/analytics")
+def get_analytics(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get rich analytics data for the shop owner dashboard"""
+    if current_user.user_type not in ["shop_owner"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    
+    my_shop_ids = db.query(Shop.id).filter(Shop.owner_id == current_user.id)
+    my_bike_ids = db.query(Bike.id).filter(Bike.shop_id.in_(my_shop_ids)).subquery()
+
+    # 1. Revenue over time (last 30 days)
+    revenue_data = db.query(
+        cast(Booking.start_time, Date).label("date"),
+        func.sum(Booking.total_price).label("revenue")
+    ).filter(
+        Booking.bike_id.in_(my_bike_ids),
+        Booking.status.in_(["completed", "returned", "paid", "confirmed"]),
+        Booking.start_time >= thirty_days_ago
+    ).group_by(cast(Booking.start_time, Date)).order_by("date").all()
+    
+    revenue_by_day = [{"date": str(d.date), "revenue": d.revenue or 0} for d in revenue_data]
+
+    # Fill in missing days
+    revenue_dict = {item['date']: item['revenue'] for item in revenue_by_day}
+    complete_revenue = []
+    for i in range(30):
+        day = (thirty_days_ago + timedelta(days=i)).date()
+        complete_revenue.append({
+            "date": day.strftime("%b %d"),
+            "revenue": revenue_dict.get(str(day), 0)
+        })
+
+    # 2. Top Performers
+    top_performers_data = db.query(
+        Bike.name,
+        func.sum(Booking.total_price).label("revenue"),
+        func.count(Booking.id).label("bookings")
+    ).join(Bike, Booking.bike_id == Bike.id).filter(
+        Bike.shop_id.in_(my_shop_ids),
+        Booking.status.in_(["completed", "returned", "paid", "confirmed"]),
+        Booking.start_time >= thirty_days_ago
+    ).group_by(Bike.id).order_by(func.sum(Booking.total_price).desc()).limit(5).all()
+    
+    top_performers = [{"name": d.name, "revenue": d.revenue or 0, "bookings": d.bookings} for d in top_performers_data]
+
+    # 3. Utilization (approximate: total booked days / (total bikes * 30 days))
+    total_bikes = db.query(func.count(Bike.id)).filter(Bike.shop_id.in_(my_shop_ids)).scalar() or 0
+    total_available_days = total_bikes * 30
+    
+    # Calculate booked days (naive approach summing (end-start) in days)
+    booked_seconds = db.query(
+        func.sum(func.extract('epoch', Booking.end_time) - func.extract('epoch', Booking.start_time))
+    ).filter(
+        Booking.bike_id.in_(my_bike_ids),
+        Booking.status.in_(["completed", "returned", "paid", "confirmed"]),
+        Booking.start_time >= thirty_days_ago
+    ).scalar() or 0
+    
+    booked_days = booked_seconds / (24 * 3600)
+    utilization = round((booked_days / total_available_days * 100), 1) if total_available_days > 0 else 0
+
+    return {
+        "revenue_over_time": complete_revenue,
+        "top_performers": top_performers,
+        "utilization_rate": min(utilization, 100) # Cap at 100% just in case of overlaps
+    }
+
 
 @router.get("/me", response_model=list[ShopOut])
 def get_my_shops(

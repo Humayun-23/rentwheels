@@ -1,7 +1,0 @@
-feat(statistics): add combined stats summary endpoint with caching
-
-- Created a new `/statistics/summary` endpoint to return total shops, vehicles, and bookings in a single request.
-- Implemented an efficient in-memory TTL cache (48 hours) to minimize database hits for static counts.
-- Fixed a typo and missing `BaseModel` inheritance in the `BookingStatsResponse` schema.
-- Added the `StatsSummaryResponse` schema for the new endpoint.
-- Registered the missing `statistics` router in `main.py` so the endpoints are accessible.
