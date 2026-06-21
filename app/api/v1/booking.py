@@ -1,5 +1,5 @@
 import secrets
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from app.utils import tz
@@ -47,7 +47,7 @@ def verify_shop_ownership(booking: Booking, current_user: User, db: Session, act
 
 @router.post("/", response_model=BookingOut, status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")
-def create_booking(request: Request, booking: BookingCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_booking(request: Request, booking: BookingCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Create a new booking (customers only)"""
     if current_user.user_type != "customer":
         raise HTTPException(
@@ -127,7 +127,7 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
         bike_id=booking.bike_id,
         start_time=start_time,
         end_time=end_time,
-        status="confirmed",
+        status="pending",
         total_price=total_price,
         magic_token=secrets.token_urlsafe(16),
         utr_number=getattr(booking, "utr_number", None),
@@ -141,6 +141,24 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
     db.add(db_booking)
     db.commit()
     db.refresh(db_booking)
+    
+    # Send Email Receipt
+    try:
+        import os
+        from app.utils.email import send_email_background, build_receipt_email
+        shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
+        msg = build_receipt_email(db_booking, current_user, bike, shop)
+        background_tasks.add_task(
+            send_email_background,
+            os.getenv("SMTP_HOST", "smtp.gmail.com"),
+            int(os.getenv("SMTP_PORT", 587)),
+            os.getenv("SMTP_USER", ""),
+            os.getenv("SMTP_PASSWORD", ""),
+            msg
+        )
+    except Exception as e:
+        print(f"Error preparing receipt email: {e}")
+        
     return db_booking
 
 
@@ -362,7 +380,7 @@ def confirm_booking(booking_id: int, current_user: User = Depends(get_current_us
 
 
 @router.post("/{booking_id}/reject", response_model=BookingOut)
-def reject_booking(booking_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def reject_booking(booking_id: int, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Reject a pending booking (shop owners only)"""
     if current_user.user_type != "shop_owner":
         raise HTTPException(
@@ -397,6 +415,24 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
     booking.status = "cancelled"
     db.commit()
     db.refresh(booking)
+    
+    try:
+        import os
+        from app.utils.email import send_email_background, build_cancellation_email
+        customer = db.query(User).filter(User.id == booking.customer_id).first()
+        bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+        msg = build_cancellation_email(booking, customer, bike)
+        background_tasks.add_task(
+            send_email_background,
+            os.getenv("SMTP_HOST", "smtp.gmail.com"),
+            int(os.getenv("SMTP_PORT", 587)),
+            os.getenv("SMTP_USER", ""),
+            os.getenv("SMTP_PASSWORD", ""),
+            msg
+        )
+    except Exception as e:
+        print(f"Error preparing cancellation email: {e}")
+        
     return booking
 
 @router.post("/{booking_id}/complete", response_model=BookingOut)
@@ -460,7 +496,7 @@ def return_booking(booking_id: int, current_user: User = Depends(get_current_use
     return booking
 
 @router.get("/{booking_id}/magic-action", response_class=HTMLResponse)
-def magic_action(booking_id: int, action: str, token: str, db: Session = Depends(get_db)):
+def magic_action(booking_id: int, action: str, token: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Handle Magic Links for WhatsApp quick actions (no auth required)."""
     booking = db.query(Booking).filter(Booking.id == booking_id).first()
     
@@ -497,6 +533,24 @@ def magic_action(booking_id: int, action: str, token: str, db: Session = Depends
                 
         booking.status = "cancelled"
         db.commit()
+        
+        try:
+            import os
+            from app.utils.email import send_email_background, build_cancellation_email
+            customer = db.query(User).filter(User.id == booking.customer_id).first()
+            bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+            msg = build_cancellation_email(booking, customer, bike)
+            background_tasks.add_task(
+                send_email_background,
+                os.getenv("SMTP_HOST", "smtp.gmail.com"),
+                int(os.getenv("SMTP_PORT", 587)),
+                os.getenv("SMTP_USER", ""),
+                os.getenv("SMTP_PASSWORD", ""),
+                msg
+            )
+        except Exception as e:
+            print(f"Error preparing cancellation email magic link: {e}")
+            
         return render_html("&#10005;", "#ef4444", "Payment Rejected", "The booking has been cancelled and the customer has been flagged for fake payment.", "#ef4444")
         
     return render_html("?", "#6b7280", "Unknown Action", "We didn't understand that action.")
