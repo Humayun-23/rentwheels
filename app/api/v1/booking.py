@@ -134,6 +134,10 @@ def create_booking(request: Request, booking: BookingCreate, current_user: User 
         token_amount=token_amount,
     )
 
+    # Decrement inventory to mark it as booked/unavailable
+    inventory.available_quantity -= 1
+    inventory.rented_quantity += 1
+
     db.add(db_booking)
     db.commit()
     db.refresh(db_booking)
@@ -311,6 +315,13 @@ def cancel_booking(booking_id: int, current_user: User = Depends(get_current_use
                 detail="Paid bookings must be cancelled through the refund flow"
             )
 
+    # Restore inventory
+    if booking.status in ["pending", "confirmed", "paid"]:
+        inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).with_for_update().first()
+        if inventory:
+            inventory.available_quantity += 1
+            inventory.rented_quantity -= 1
+
     booking.status = "cancelled"
     db.commit()
 
@@ -377,6 +388,12 @@ def reject_booking(booking_id: int, current_user: User = Depends(get_current_use
             detail=f"Cannot reject booking with status '{booking.status}'."
         )
     
+    # Restore inventory
+    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).with_for_update().first()
+    if inventory:
+        inventory.available_quantity += 1
+        inventory.rented_quantity -= 1
+        
     booking.status = "cancelled"
     db.commit()
     db.refresh(booking)
@@ -431,6 +448,12 @@ def return_booking(booking_id: int, current_user: User = Depends(get_current_use
             detail=f"Cannot mark booking as returned with status '{booking.status}'. Only confirmed, paid, or completed bookings can be returned."
         )
     
+    # Restore inventory
+    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).with_for_update().first()
+    if inventory:
+        inventory.available_quantity += 1
+        inventory.rented_quantity -= 1
+        
     booking.status = "returned"
     db.commit()
     db.refresh(booking)
@@ -465,6 +488,13 @@ def magic_action(booking_id: int, action: str, token: str, db: Session = Depends
         return render_html("!", "#f59e0b", "Already Cancelled", "This booking has already been cancelled.")
 
     if action == "reject":
+        # Restore inventory when rejecting via magic link
+        if booking.status in ["pending", "confirmed", "paid"]:
+            inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).with_for_update().first()
+            if inventory:
+                inventory.available_quantity += 1
+                inventory.rented_quantity -= 1
+                
         booking.status = "cancelled"
         db.commit()
         return render_html("&#10005;", "#ef4444", "Payment Rejected", "The booking has been cancelled and the customer has been flagged for fake payment.", "#ef4444")

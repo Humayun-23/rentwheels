@@ -39,3 +39,4 @@ better-exceptions==0.3.3
 # - If you use async SQLAlchemy with Postgres, replace psycopg2-binary with asyncpg.
 # - Uvicorn[standard] includes uvloop and httptools for better performance on macOS/Linux.
 gunicorn==21.2.0
+google-auth
