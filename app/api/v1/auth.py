@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm
-
+from app.schemas.googlelogin import GoogleLoginRequest
 from app.utils.limiter import limiter
 from app.db.database import get_db
 from app.db.models import User
@@ -15,10 +15,6 @@ import secrets
 import os
 
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "647492306352-ajfb14t9be7ibq8furvfkb25rv3p6jql.apps.googleusercontent.com")
-
-class GoogleLoginRequest(BaseModel):
-    credential: str
-    user_type: str = "customer"
 
 router = APIRouter(tags=['Authentication'])
 
