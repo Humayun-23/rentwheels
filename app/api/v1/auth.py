@@ -18,6 +18,7 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "647492306352-ajfb14t9be7i
 
 class GoogleLoginRequest(BaseModel):
     credential: str
+    user_type: str = "customer"
 
 router = APIRouter(tags=['Authentication'])
 
@@ -59,7 +60,7 @@ def google_login(request: Request, body: GoogleLoginRequest, db: Session = Depen
                 firstname=firstname,
                 lastname=lastname,
                 phone_number="",
-                user_type="customer",
+                user_type=body.user_type if body.user_type in ["customer", "shop_owner"] else "customer",
                 is_email_verified=True
             )
             db.add(user)
