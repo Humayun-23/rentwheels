@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     debug: bool = False
 
     cloudinary_url: str | None = Field(default=None, validation_alias="CLOUDINARY_URL")
+    azure_storage_connection_string: str | None = Field(default=None, validation_alias="AZURE_STORAGE_CONNECTION_STRING")
+    azure_storage_rentalos_container: str | None = Field(default=None, validation_alias="AZURE_STORAGE_RENTALOS_CONTAINER")
+    azure_storage_rentalos_max_upload_mb: int = Field(default=5, validation_alias="AZURE_STORAGE_RENTALOS_MAX_UPLOAD_MB")
+    azure_storage_rentalos_public_base_url: str | None = Field(default=None, validation_alias="AZURE_STORAGE_RENTALOS_PUBLIC_BASE_URL")
 
     @field_validator("cors_origins", mode="before")
     @classmethod

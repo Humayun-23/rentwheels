@@ -1,5 +1,6 @@
 import os
 from sqlalchemy import create_engine, event
+from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import declarative_base, sessionmaker
 from starlette.responses import Response
 from app.config import settings
@@ -10,24 +11,12 @@ from app.config import settings
 # Add sslmode=require for cloud databases like Neon
 DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}?sslmode=require"
 
-# Connection pool configuration optimized for Azure PostgreSQL
-# Adjust pool_size based on your Azure tier:
-# - Burstable B1ms: pool_size=3-5, max_overflow=2
-# - General Purpose D2s: pool_size=10-15, max_overflow=5
-# - Memory Optimized E2s: pool_size=20+, max_overflow=10
-
-POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "15"))  # ✅ FIXED: Reduced for Azure
-MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
-POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "280"))  # ✅ FIXED: 10 min for Azure timeout
-POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))  # Wait up to 30s for connection
-
+# Using NullPool for Neon serverless free tier. 
+# This disables connection pooling, allowing the database to scale to zero 
+# and save compute hours when the backend is idle.
 engine = create_engine(
     DATABASE_URL,
-    pool_size=POOL_SIZE,
-    max_overflow=MAX_OVERFLOW,
-    pool_pre_ping=True,  # Verify connections before using them
-    pool_recycle=POOL_RECYCLE,  # Recycle connections to handle idle timeouts
-    pool_timeout=POOL_TIMEOUT,  # Timeout for getting connection from pool
+    poolclass=NullPool,
     echo=os.getenv("SQL_ECHO", "false").lower() == "true",  # Debug logging
     connect_args={
         "connect_timeout": 10,  # 10 second connection timeout

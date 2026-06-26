@@ -34,7 +34,7 @@ class UserOut(BaseModel):
     firstname: str
     lastname: str
     phone_number: str
-    user_type: Literal["customer", "shop_owner"]
+    user_type: Literal["customer", "shop_owner", "shop_staff"]
     is_email_verified: bool
     id: int
     created_at: datetime

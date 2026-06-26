@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Time
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Time, UniqueConstraint, Float
 from sqlalchemy.orm import relationship
 from app.utils import tz
 from .database import Base
@@ -23,6 +23,7 @@ class User(Base):
     shops = relationship("Shop", back_populates="owner", foreign_keys="Shop.owner_id")
     # Relationship: One user (customer) can have multiple bookings
     bookings = relationship("Booking", back_populates="customer", foreign_keys="Booking.customer_id")
+    rental_staff_memberships = relationship("RentalStaff", back_populates="user", foreign_keys="RentalStaff.user_id")
 
 
 class Shop(Base):
@@ -49,6 +50,9 @@ class Shop(Base):
     owner = relationship("User", back_populates="shops", foreign_keys=[owner_id])
     bikes = relationship("Bike", back_populates="shop", cascade="all, delete-orphan")
     image = relationship("ShopImage", back_populates="shop", cascade="all, delete-orphan")
+    rental_staff = relationship("RentalStaff", back_populates="shop", cascade="all, delete-orphan")
+    rental_customers = relationship("RentalCustomer", back_populates="shop", cascade="all, delete-orphan")
+    rental_bookings = relationship("RentalBooking", back_populates="shop", cascade="all, delete-orphan")
 
 
 class ShopImage(Base):
@@ -88,6 +92,7 @@ class Bike(Base):
     inventory = relationship("BikeInventory", back_populates="bike", uselist=False, cascade="all, delete-orphan")
     image = relationship("BikeImage", back_populates="bike", cascade="all, delete-orphan")
     service_logs = relationship("ServiceLog", back_populates="bike", cascade="all, delete-orphan")
+    rental_bookings = relationship("RentalBooking", back_populates="bike", cascade="all, delete-orphan")
 
 class ServiceLog(Base):
     """ServiceLog model - tracks maintenance history for bikes"""
@@ -217,4 +222,173 @@ class Payment(Base):
     status = Column(String, nullable=False, default="created")  # "created", "paid", "failed", "refunded", "refund_pending"
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
-    
+
+
+class RentalStaff(Base):
+    """RentalOS staff membership for a shop."""
+    __tablename__ = "rental_staff"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String, nullable=False, default="staff")  # "staff" or "owner"
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "user_id", name="uq_rental_staff_shop_user"),
+    )
+
+    shop = relationship("Shop", back_populates="rental_staff", foreign_keys=[shop_id])
+    user = relationship("User", back_populates="rental_staff_memberships", foreign_keys=[user_id])
+    bookings = relationship("RentalBooking", back_populates="staff", foreign_keys="RentalBooking.staff_id")
+
+
+class RentalCustomer(Base):
+    """RentalOS offline customer record scoped to one shop."""
+    __tablename__ = "rental_customers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone_number = Column(String, nullable=False, index=True)
+    firstname = Column(String, nullable=True)
+    lastname = Column(String, nullable=True)
+    document_consent = Column(Boolean, default=False)
+    document_consent_at = Column(DateTime, nullable=True)
+    marketing_consent = Column(Boolean, default=False)
+    marketing_consent_at = Column(DateTime, nullable=True)
+    current_flag_status = Column(String, nullable=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
+
+    __table_args__ = (
+        UniqueConstraint("shop_id", "phone_number", name="uq_rental_customers_shop_phone"),
+    )
+
+    shop = relationship("Shop", back_populates="rental_customers", foreign_keys=[shop_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+    bookings = relationship("RentalBooking", back_populates="customer", cascade="all, delete-orphan")
+    flags = relationship("RentalCustomerFlag", back_populates="customer", cascade="all, delete-orphan")
+
+
+class RentalCustomerFlag(Base):
+    """RentalOS customer flag visible during counter lookup."""
+    __tablename__ = "rental_customer_flags"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("rental_customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    flag_type = Column(String, nullable=False)
+    severity = Column(String, nullable=False, default="info")  # "info", "warning", "blocked"
+    note = Column(String, nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
+
+    shop = relationship("Shop", foreign_keys=[shop_id])
+    customer = relationship("RentalCustomer", back_populates="flags", foreign_keys=[customer_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
+
+
+class RentalBooking(Base):
+    """RentalOS offline counter booking separate from online marketplace bookings."""
+    __tablename__ = "rental_bookings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
+    customer_id = Column(Integer, ForeignKey("rental_customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, index=True)
+    staff_id = Column(Integer, ForeignKey("rental_staff.id", ondelete="SET NULL"), nullable=True, index=True)
+    start_time = Column(DateTime, nullable=False, index=True)
+    end_time = Column(DateTime, nullable=False, index=True)
+    status = Column(String, nullable=False, default="draft", index=True)  # "draft", "confirmed", "active", "completed", "cancelled"
+    total_amount = Column(Integer, nullable=True)
+    advance_paid = Column(Integer, nullable=False, default=0)
+    balance_due = Column(Integer, nullable=False, default=0)
+    security_deposit = Column(Integer, nullable=False, default=0)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
+
+    shop = relationship("Shop", back_populates="rental_bookings", foreign_keys=[shop_id])
+    customer = relationship("RentalCustomer", back_populates="bookings", foreign_keys=[customer_id])
+    bike = relationship("Bike", back_populates="rental_bookings", foreign_keys=[bike_id])
+    staff = relationship("RentalStaff", back_populates="bookings", foreign_keys=[staff_id])
+    documents = relationship("RentalBookingDocument", back_populates="booking", cascade="all, delete-orphan")
+    handover_photos = relationship("RentalHandoverPhoto", back_populates="booking", cascade="all, delete-orphan")
+    payments = relationship("RentalPayment", back_populates="booking", cascade="all, delete-orphan")
+    notes = relationship("RentalBookingNote", back_populates="booking", cascade="all, delete-orphan")
+
+
+class RentalBookingDocument(Base):
+    """RentalOS DL/ID proof uploaded for a counter booking."""
+    __tablename__ = "rental_booking_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("rental_bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_type = Column(String, nullable=False)  # "driving_license" or "id_proof"
+    file_url = Column(String, nullable=False)
+    file_name = Column(String, nullable=True)
+    content_type = Column(String, nullable=True)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=tz.now)
+
+    booking = relationship("RentalBooking", back_populates="documents", foreign_keys=[booking_id])
+    uploaded_by_user = relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+class RentalHandoverPhoto(Base):
+    """RentalOS customer-with-vehicle handover photo with optional location metadata."""
+    __tablename__ = "rental_handover_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("rental_bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+    image_url = Column(String, nullable=False)
+    location_permission_granted = Column(Boolean, default=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    location_accuracy_meters = Column(Integer, nullable=True)
+    location_address = Column(String, nullable=True)
+    captured_at = Column(DateTime, nullable=True)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=tz.now)
+
+    booking = relationship("RentalBooking", back_populates="handover_photos", foreign_keys=[booking_id])
+    uploaded_by_user = relationship("User", foreign_keys=[uploaded_by_user_id])
+
+
+class RentalPayment(Base):
+    """RentalOS offline payment tracking for advance, balance, and security deposit."""
+    __tablename__ = "rental_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("rental_bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+    payment_type = Column(String, nullable=False)  # "advance", "balance", "security_deposit"
+    amount = Column(Integer, nullable=False)
+    status = Column(String, nullable=False, default="pending", index=True)  # "pending", "partial", "paid", "refunded"
+    method = Column(String, nullable=True)
+    reference_number = Column(String, nullable=True)
+    paid_at = Column(DateTime, nullable=True)
+    received_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=tz.now)
+    updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
+
+    booking = relationship("RentalBooking", back_populates="payments", foreign_keys=[booking_id])
+    received_by_user = relationship("User", foreign_keys=[received_by_user_id])
+
+
+class RentalBookingNote(Base):
+    """RentalOS optional booking/customer note."""
+    __tablename__ = "rental_booking_notes"
+
+    id = Column(Integer, primary_key=True, index=True)
+    booking_id = Column(Integer, ForeignKey("rental_bookings.id", ondelete="CASCADE"), nullable=False, index=True)
+    note = Column(String, nullable=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime, default=tz.now)
+
+    booking = relationship("RentalBooking", back_populates="notes", foreign_keys=[booking_id])
+    created_by_user = relationship("User", foreign_keys=[created_by_user_id])
