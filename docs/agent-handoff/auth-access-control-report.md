@@ -72,6 +72,7 @@ Observed values:
 
 - `customer`
 - `shop_owner`
+- `shop_staff`
 - `admin` is referenced in `app/api/v1/booking.py::list_bookings`, but `UserCreate` only allows `customer` and `shop_owner`.
 
 Common access patterns:
@@ -80,6 +81,7 @@ Common access patterns:
 - Shop-owner-only: shop create, bike CRUD, inventory management, shop dashboard/analytics, booking confirm/reject/complete/return.
 - Self-only: user profile get/update.
 - Public: shop list/detail, bike detail/list, search, stats, review list, password reset request/confirm, email verification.
+- RentalOS staff users are created internally by owner-only `POST /api/v1/rentalos/staff`; public signup does not allow `shop_staff`.
 
 Confirmed project status:
 
@@ -117,6 +119,7 @@ Core functions:
 - `get_user_rental_staff_membership(db, user_id, shop_id)`
 - `get_rentalos_shop_access(db, shop_id, current_user)`
 - `assert_rentalos_shop_access(db, shop_id, current_user)`
+- `assert_rentalos_owner_access(db, shop_id, current_user)`
 - `get_accessible_rental_booking(db, booking_id, current_user)`
 - `get_accessible_rental_customer(db, customer_id, current_user)`
 
@@ -138,6 +141,14 @@ Customer flag access:
 
 - Load `RentalCustomer` by `customer_id`.
 - Use `customer.shop_id` for access checks.
+
+Staff management access:
+
+- `POST /api/v1/rentalos/staff`, `GET /api/v1/rentalos/staff`, and `PATCH /api/v1/rentalos/staff/{staff_id}` are owner-only.
+- They use `assert_rentalos_owner_access`, which requires `Shop.owner_id == current_user.id`.
+- Active staff can use counter APIs but cannot manage staff.
+- Inactive staff may still log in through normal auth, but `/api/v1/rentalos/me` omits inactive memberships and counter APIs reject inactive staff.
+- `GET /api/v1/rentalos/me` returns owner shops and active staff shops for frontend routing.
 
 ## Where authorization checks are implemented
 
@@ -172,10 +183,9 @@ RentalOS:
 
 ## Known risks or missing tests
 
-- No RentalOS tests observed in `tests/`.
-- Fresh `.venv/bin/pytest` run failed two tests due login rate limiting: `tests/test_users.py::test_get_user_profile_success` and `tests/test_users.py::test_get_user_profile_forbidden` receive `/api/v1/login` 429 responses.
+- RentalOS tests exist under the `tests/test_rentos_*.py` naming convention.
+- Fresh `.venv/bin/pytest` run after PR5 passed: `36 passed`.
 - `admin` branch in `list_bookings()` is expected to be unreachable from public registration schema because no admin users exist outside registration.
-- RentalOS staff management APIs are not present, so tests will need direct fixture creation of `RentalStaff`.
 - RentalOS file URLs are returned directly. Access to private blob contents depends on storage configuration until signed/authenticated download is implemented.
 - Marketplace/RentalOS availability conflict checks are not centralized.
 
@@ -202,3 +212,6 @@ RentalOS:
 6. Booking-scoped upload/list/payment/note routes reject users from other shops.
 7. Customer flag routes reject users from other shops.
 8. `shop_id` in request body never bypasses booking/customer-derived access checks.
+9. Owner can create/list/update/deactivate staff for own shop.
+10. Staff cannot access staff management endpoints.
+11. Inactive staff does not appear in `/api/v1/rentalos/me` and cannot access counter endpoints.

@@ -86,7 +86,7 @@ Relevant RentalOS migration: `alembic/versions/7c3a91d4e8f2_add_rentalos_databas
 - Constraints/indexes: `customer_id`, `bike_id`, `id` indexed.
 - Cascade behavior: deleted with user/bike through FK/relationship.
 - APIs: booking router, payments router, reviews, statistics, RentalOS conflict checks.
-- Audit/testing concerns: product decision is that online `paid` bookings should block RentalOS availability. Current RentalOS conflict code checks online `["pending", "confirmed"]`, so tests should expose the missing `paid` case before any fix.
+- Audit/testing concerns: conflict statuses should stay aligned across marketplace and RentalOS. Online creation checks `["pending", "confirmed", "paid"]`; RentalOS conflict code checks `["pending", "paid", "confirmed"]`.
 
 ## Payment
 
@@ -155,8 +155,8 @@ Relevant RentalOS migration: `alembic/versions/7c3a91d4e8f2_add_rentalos_databas
 - Relationships: `shop`, `user`, `bookings`.
 - Constraints/indexes: unique `(shop_id, user_id)` named `uq_rental_staff_shop_user`; `shop_id`, `user_id`, `id` indexed.
 - Cascade behavior: deleted with shop/user through FK; shop relationship also has delete-orphan.
-- APIs: used by RentalOS access helpers; no staff management API observed.
-- Audit/testing concerns: active staff can access assigned shop only; inactive staff rejected.
+- APIs: RentalOS access helpers, `/api/v1/rentalos/me`, and owner-only staff management endpoints.
+- Audit/testing concerns: active staff can access assigned shop counter APIs only; inactive staff rejected. Staff management must remain owner-only.
 
 ## RentalCustomer
 

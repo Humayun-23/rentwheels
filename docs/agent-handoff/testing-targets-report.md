@@ -10,6 +10,11 @@ Existing test files:
 - `tests/test_auth.py`
 - `tests/test_booking.py`
 - `tests/test_main.py`
+- `tests/test_rentos_access.py`
+- `tests/test_rentos_booking_conflicts.py`
+- `tests/test_rentos_payments.py`
+- `tests/test_rentos_staff_management.py`
+- `tests/test_rentos_uploads.py`
 - `tests/test_shops.py`
 - `tests/test_users.py`
 
@@ -24,17 +29,12 @@ Existing test pattern:
 
 Fresh test result:
 
-- `pytest` was not on PATH in this shell.
-- `.venv/bin/pytest` collected 13 tests.
-- Result: `11 passed, 2 failed`.
-- Failing tests:
-  - `tests/test_users.py::test_get_user_profile_success`
-  - `tests/test_users.py::test_get_user_profile_forbidden`
-- Cause: `/api/v1/login` returns SlowAPI `429 Too Many Requests` for `testclient`; helper `get_auth_token()` then raises `KeyError: 'access_token'`.
+- `.venv/bin/pytest` collected 36 tests.
+- Result: `36 passed`.
 
 SlowAPI limiter behavior:
 
-- The limiter state affects the existing test suite.
+- The limiter can affect tests that call `/api/v1/login` repeatedly.
 - Future auth-dependent tests should prefer direct `create_access_token({"user_id": user.id, "role": "user"})` helpers unless specifically testing login.
 - If login behavior is under test, reset/isolate the limiter or configure test mode to avoid cross-test 429s.
 
@@ -97,10 +97,17 @@ For auth:
 5. Staff cannot access unassigned shop.
 6. Booking-scoped endpoints use `RentalBooking.shop_id`, not request body.
 7. Customer-scoped flag endpoints use `RentalCustomer.shop_id`.
+8. Owner can create/list/update/deactivate staff.
+9. Staff cannot access staff management endpoints.
+10. `/api/v1/rentalos/me` returns owner shops and active staff shops only.
 
 Suggested routes:
 
 - `GET /api/v1/rentalos/catalog/vehicles`
+- `GET /api/v1/rentalos/me`
+- `POST /api/v1/rentalos/staff`
+- `GET /api/v1/rentalos/staff?shop_id=...`
+- `PATCH /api/v1/rentalos/staff/{staff_id}`
 - `GET /api/v1/rentalos/bookings/{booking_id}`
 - `GET /api/v1/rentalos/bookings/{booking_id}/documents`
 - `POST /api/v1/rentalos/customers/{customer_id}/flags`
@@ -231,6 +238,10 @@ RentalOS:
 4. Inactive staff cannot access.
 5. Staff cannot access unassigned shop.
 6. Other shop cannot access documents/photos/payments/notes/flags.
+7. Owner can manage staff for own shop.
+8. Owner cannot manage staff for another shop.
+9. Active staff cannot manage staff.
+10. Inactive staff is omitted from `/api/v1/rentalos/me`.
 
 ## Cross-shop isolation tests
 
@@ -319,7 +330,7 @@ pytest
 If login rate-limit failures appear:
 
 ```bash
-pytest tests/test_auth.py tests/test_users.py -vv
+.venv/bin/pytest tests/test_auth.py tests/test_users.py -vv
 ```
 
 Then add focused RentalOS tests:

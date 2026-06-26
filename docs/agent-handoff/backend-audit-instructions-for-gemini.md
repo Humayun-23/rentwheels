@@ -29,7 +29,7 @@ Keep these separate:
 Do not add:
 
 - Frontend.
-- RentalOS staff management unless explicitly requested later.
+- Expanded RentalOS staff management beyond the implemented owner-only create/list/update/deactivate MVP.
 - Analytics.
 - Invoices.
 - SMS/email automation.
@@ -95,10 +95,10 @@ Do not add:
 - Non-overlapping booking succeeds.
 - Back-to-back booking succeeds.
 
-Known mismatch to test:
+Current behavior to preserve:
 
 - Product decision: online paid `Booking` should block RentalOS.
-- Current RentalOS code checks online pending/confirmed only, so write a failing test before suggesting a small fix.
+- Current RentalOS code includes online pending/paid/confirmed in the RentalOS conflict set.
 
 ## Expected upload behavior to verify
 

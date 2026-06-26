@@ -99,6 +99,10 @@ All RentalOS endpoints are in `app/api/v1/rentalos.py`, router prefix `/rentalos
 
 | Method | Path | Auth | Request | Response | Models touched | Side effects | Visible errors | Priority |
 |---|---|---|---|---|---|---|---|---|
+| GET | `/api/v1/rentalos/me` | Bearer user | none | `RentalOSMeResponse` | `User`, `Shop`, `RentalStaff` | None | 401 | High |
+| POST | `/api/v1/rentalos/staff` | Bearer shop owner | `RentalStaffCreate` | `RentalStaffResponse` | `Shop`, `User`, `RentalStaff` | Creates new `shop_staff` user if needed; creates active staff membership | 400 invalid role/missing password/owner self-add, 403 non-owner, 404 shop, 409 duplicate/conflict | High |
+| GET | `/api/v1/rentalos/staff` | Bearer shop owner | query `shop_id` | `list[RentalStaffResponse]` | `Shop`, `RentalStaff`, `User` | None | 403 non-owner, 404 shop | High |
+| PATCH | `/api/v1/rentalos/staff/{staff_id}` | Bearer shop owner | `RentalStaffUpdate` | `RentalStaffResponse` | `RentalStaff`, `User`, `Shop` | Updates staff linked user details and/or active state | 400 invalid role, 403 non-owner, 404 staff/shop | High |
 | GET | `/api/v1/rentalos/catalog/vehicles` | Bearer owner or active `RentalStaff` | query `shop_id`, optional `start_time`, `end_time` | `list[CatalogVehicleResponse]` | `Shop`, `RentalStaff`, `Bike`, `BikeImage`, `Booking`, `RentalBooking` | None | 400 partial/invalid time, 403, 404 shop | High |
 | GET | `/api/v1/rentalos/customers/search` | Bearer owner/staff | query `shop_id`, `phone` | `RentalCustomerSearchResponse` | `Shop`, `RentalStaff`, `RentalCustomer`, `RentalCustomerFlag`, `RentalBooking`, `RentalBookingNote` | None | 403, 404 shop | High |
 | POST | `/api/v1/rentalos/customers` | Bearer owner/staff | `RentalCustomerCreate` | `RentalCustomerOut` | `RentalCustomer`, `Shop`, `RentalStaff` | Creates shop-scoped customer and consent timestamps | 409 duplicate, 403, 404 shop | High |

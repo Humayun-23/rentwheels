@@ -32,6 +32,7 @@ Access helpers:
 - `get_user_rental_staff_membership`
 - `get_rentalos_shop_access`
 - `assert_rentalos_shop_access`
+- `assert_rentalos_owner_access`
 - `get_accessible_rental_booking`
 - `get_accessible_rental_customer`
 
@@ -57,6 +58,8 @@ Payment/flag helpers:
 - `_validate_customer_flag`
 - `_infer_customer_flag_severity`
 - `_create_customer_flag`
+- `_validate_staff_role`
+- `_staff_response`
 
 ## RentalOS models
 
@@ -77,6 +80,11 @@ Defined in `app/schemas/rentalos.py`:
 
 - `RentalCustomerFlagSummary`
 - `RentalCustomerSearchResponse`
+- `RentalStaffCreate`
+- `RentalStaffUpdate`
+- `RentalStaffResponse`
+- `RentalOSAccessShop`
+- `RentalOSMeResponse`
 - `RentalCustomerCreate`
 - `RentalCustomerOut`
 - `RentalBookingCreate`
@@ -97,6 +105,10 @@ Defined in `app/schemas/rentalos.py`:
 
 ## RentalOS endpoints
 
+- `GET /api/v1/rentalos/me`
+- `POST /api/v1/rentalos/staff`
+- `GET /api/v1/rentalos/staff`
+- `PATCH /api/v1/rentalos/staff/{staff_id}`
 - `GET /api/v1/rentalos/catalog/vehicles`
 - `GET /api/v1/rentalos/customers/search`
 - `POST /api/v1/rentalos/customers`
@@ -115,7 +127,7 @@ Defined in `app/schemas/rentalos.py`:
 - `POST /api/v1/rentalos/customers/{customer_id}/flags`
 - `GET /api/v1/rentalos/customers/{customer_id}/flags`
 
-No frontend endpoints, staff management APIs, analytics, invoices, SMS/email automation, OCR, or native app APIs were observed for RentalOS.
+No frontend endpoints, analytics, invoices, SMS/email automation, OCR, or native app APIs were observed for RentalOS.
 
 ## Access control
 
@@ -133,6 +145,20 @@ Rejected:
 - Staff assigned to a different shop.
 
 Booking-scoped endpoints derive access from `RentalBooking.shop_id`. Customer flag endpoints derive access from `RentalCustomer.shop_id`.
+
+Owner-only staff management:
+
+- Owner is not stored as `RentalStaff`.
+- Owner access is derived from `Shop.owner_id == current_user.id`.
+- `assert_rentalos_owner_access` is used for staff management APIs.
+- Staff cannot create/list/update staff.
+- Staff creation may create a normal `User` with `user_type="shop_staff"` and `is_email_verified=True`.
+- Public signup remains restricted to `customer` and `shop_owner`.
+
+Current user access discovery:
+
+- `GET /api/v1/rentalos/me` returns `owned_shops`, active `staff_shops`, and `has_rentalos_access`.
+- Inactive staff memberships are not listed in `staff_shops`.
 
 ## Customer phone lookup flow
 
@@ -229,7 +255,7 @@ Important behavior:
 
 Constants in `app/api/v1/rentalos.py`:
 
-- `ONLINE_CONFLICT_STATUSES = ["pending", "confirmed"]`
+- `ONLINE_CONFLICT_STATUSES = ["pending", "paid", "confirmed"]`
 - `RENTALOS_CONFLICT_STATUSES = ["draft", "confirmed", "active"]`
 
 Overlap filter:
@@ -241,7 +267,7 @@ Conflict rules:
 
 - Online pending `Booking` blocks RentalOS booking.
 - Online confirmed `Booking` blocks RentalOS booking.
-- Online paid `Booking` should block RentalOS booking per product decision.
+- Online paid `Booking` blocks RentalOS booking.
 - Online completed/cancelled bookings should not block RentalOS booking.
 - RentalOS draft/confirmed/active bookings block.
 - RentalOS completed/cancelled bookings should not block.
@@ -253,7 +279,7 @@ Code note:
 
 Audit concern:
 
-- Online `Booking` creation currently uses its own conflict logic and includes online status `paid` in conflict checks. Product decision says online `paid` should block RentalOS too, but current RentalOS `ONLINE_CONFLICT_STATUSES` is `["pending", "confirmed"]`. Tests should catch this mismatch.
+- Online `Booking` creation still uses its own conflict logic. RentalOS includes online `pending`, `paid`, and `confirmed` in its conflict set, but a future shared availability service should keep both flows consistent.
 
 ## Azure document upload flow
 
@@ -486,7 +512,7 @@ Not observed in current backend:
 - Azure RentalOS container privacy is not in place yet.
 - File validation relies on upload content type and size; no content sniffing or malware scanning observed.
 - No model-level enum/check constraints for status/type fields.
-- No RentalOS staff management API exists, so staff lifecycle must be controlled elsewhere or added in a later PR.
+- RentalOS staff management is minimal: owner can create/list/update/deactivate staff, but there is no invitation email, hard delete, custom password reset, or dynamic RBAC.
 - Customer flags and notes may contain sensitive operational data; access tests should be strict.
 
 ## Audit concerns
@@ -497,7 +523,8 @@ Not observed in current backend:
 - Verify marketplace Cloudinary uploads remain unchanged.
 - Verify back-to-back bookings succeed.
 - Verify completed/cancelled RentalOS bookings do not block future bookings.
-- Verify online paid bookings block RentalOS availability; current code appears to miss this status.
+- Verify online paid bookings block RentalOS availability.
+- Verify staff management remains owner-only and inactive staff cannot access counter APIs.
 - Verify rate-limiter isolation in tests.
 
 ## Test plan
@@ -508,7 +535,7 @@ High-priority tests:
 2. Customer phone lookup found/not found and latest flag/note.
 3. Unique `(shop_id, phone_number)` behavior.
 4. Catalog availability for available/unavailable/maintenance/booked vehicles.
-5. RentalOS booking create conflicts against online pending/confirmed bookings.
+5. RentalOS booking create conflicts against online pending/paid/confirmed bookings.
 6. RentalOS booking create conflicts against RentalOS draft/confirmed/active bookings.
 7. Completed/cancelled online and RentalOS bookings do not block availability.
 8. Back-to-back booking succeeds.
