@@ -9,6 +9,7 @@ from app.db.database import get_db
 from app.db.models import Booking, Bike, BikeInventory, User, Shop, Payment
 from app.schemas.booking import BookingCreate, BookingUpdate, BookingOut
 from app.api.v1.oauth2 import get_current_user
+from app.services.availability import check_bike_availability_by_id
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -58,8 +59,15 @@ def create_booking(request: Request, booking: BookingCreate, background_tasks: B
     start_time = tz.ensure_aware(booking.start_time)
     end_time = tz.ensure_aware(booking.end_time)
 
-    # Check if bike exists
-    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
+    # Lock bike/inventory before checking shared online + RentalOS availability.
+    bike, inventory, availability = check_bike_availability_by_id(
+        db,
+        booking.bike_id,
+        start_time,
+        end_time,
+        lock=True,
+        require_inventory=True,
+    )
     if not bike:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -90,28 +98,10 @@ def create_booking(request: Request, booking: BookingCreate, background_tasks: B
             detail=f"Booking cannot exceed {MAX_BOOKING_DAYS} days"
         )
 
-    # Check if bike is available with row-level lock to prevent race conditions
-    inventory = db.query(BikeInventory).filter(
-        BikeInventory.bike_id == booking.bike_id
-    ).with_for_update().first()
-    
-    if not inventory or inventory.available_quantity <= 0:
+    if not availability.is_available:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bike is not available for booking"
-        )
-    # checking if the bike has enough capacity for the requested time range
-    conflicting_bookings = db.query(Booking).filter(
-        Booking.bike_id == booking.bike_id,
-        Booking.status.in_(["pending", "confirmed", "paid"]),
-        Booking.start_time < end_time,
-        Booking.end_time > start_time
-    ).count()
-
-    if conflicting_bookings >= inventory.available_quantity:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bike is fully booked for the requested time range"
+            detail=availability.reason or "Bike is not available for booking"
         )
     if start_time < tz.now():
         raise HTTPException(
@@ -277,22 +267,21 @@ def update_booking(booking_id: int, booking_update: BookingUpdate, current_user:
             detail="Booking end time must be after the start time"
         )
 
-    inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == booking.bike_id).with_for_update().first()
-    conflicting_bookings = db.query(Booking).filter(
-        Booking.bike_id == booking.bike_id,
-        Booking.id != booking.id,
-        Booking.status.in_(["pending", "confirmed", "paid"]),
-        Booking.start_time < new_end_time,
-        Booking.end_time > new_start_time
-    ).count()
-    
-    if not inventory or conflicting_bookings >= inventory.available_quantity:
+    bike, _inventory, availability = check_bike_availability_by_id(
+        db,
+        booking.bike_id,
+        new_start_time,
+        new_end_time,
+        lock=True,
+        require_inventory=True,
+        exclude_online_booking_id=booking.id,
+    )
+    if not availability.is_available:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Bike is fully booked for the requested time range"
+            detail=availability.reason or "Bike is fully booked for the requested time range"
         )
 
-    bike = db.query(Bike).filter(Bike.id == booking.bike_id).first()
     booking.start_time = new_start_time
     booking.end_time = new_end_time
     if bike:

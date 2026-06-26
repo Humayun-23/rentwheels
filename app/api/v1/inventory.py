@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
 from datetime import datetime
 
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import BikeInventory, Bike, Booking, Shop, User
+from app.db.models import BikeInventory, Bike, Shop, User
 from app.schemas.inventory import BikeInventoryCreate, BikeInventoryUpdate, BikeInventoryOut, InventoryAvailability
+from app.services.availability import check_bike_availability
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -202,29 +202,22 @@ def check_availability_range(shop_id: int, start_time: datetime, end_time: datet
     availability_list = []
 
     for bike in bikes:
-        # Count active bookings during the time range
-        conflicting_bookings = db.query(Booking).filter(
-            and_(
-                Booking.bike_id == bike.id,
-                Booking.status.in_(["confirmed", "pending"]),
-                # Booking overlaps with requested time
-                or_(
-                    and_(Booking.start_time <= start_time, Booking.end_time > start_time),
-                    and_(Booking.start_time < end_time, Booking.end_time >= end_time),
-                    and_(Booking.start_time >= start_time, Booking.end_time <= end_time)
-                )
-            )
-        ).count()
-
         inventory = db.query(BikeInventory).filter(BikeInventory.bike_id == bike.id).first()
         if inventory:
-            available = inventory.available_quantity - conflicting_bookings
+            availability = check_bike_availability(
+                db,
+                bike,
+                start_time,
+                end_time,
+                inventory=inventory,
+                require_inventory=True,
+            )
 
             availability_list.append(InventoryAvailability(
                 bike_id=bike.id,
-                is_available=available > 0,
-                available_count=max(0, available),
-                total_count=inventory.total_quantity
+                is_available=availability.is_available,
+                available_count=availability.available_count,
+                total_count=availability.total_count
             ))
 
     return availability_list
