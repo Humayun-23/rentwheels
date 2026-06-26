@@ -2,7 +2,7 @@
 
 Paths are final mounted API paths unless noted. Versioned routers are mounted in `app/main.py` with `/api/v1`.
 
-## Auth/user endpoints
+## Auth/user endpoints (GoPanda)
 
 | Method | Path | Router/file | Auth | Request | Response | Models touched | Side effects | Visible errors | Priority |
 |---|---|---|---|---|---|---|---|---|---|
