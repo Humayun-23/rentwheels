@@ -13,8 +13,15 @@ from app.utils import tz
 
 # We import our database models so we can manually insert "fake" data
 # for our tests to interact with.
-from app.db.models import Shop, Bike, BikeInventory, Booking
-from tests.test_users import setup_verified_user, get_auth_token
+from app.db.models import Shop, Bike, BikeInventory, Booking, User
+from app.utils.utils import hash_password
+
+def setup_verified_user(db_session, email="owner@example.com"):
+    user = User(email=email, password=hash_password("password"), firstname="Test", lastname="User", phone_number="1234567890", is_email_verified=True, user_type="customer")
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
 
 def setup_test_bike(db_session, owner):
     """
@@ -60,28 +67,21 @@ def setup_test_bike(db_session, owner):
     return bike
 
 
-def test_create_booking_success(client, db_session):
+def test_create_booking_success(client, verified_owner, verified_customer, auth_headers, db_session):
     """
     The 'Happy Path': A customer successfully books a bike for available dates.
     """
     # ---------------------------------------------------------
     # STEP 1: DATABASE SETUP
     # ---------------------------------------------------------
-    owner = setup_verified_user(db_session, email="owner@example.com")
-    owner.user_type = "shop_owner"
-    db_session.commit()
-
-    customer = setup_verified_user(db_session, email="customer@example.com")
-    
     # Create the fake bike for the customer to rent
-    bike = setup_test_bike(db_session, owner)
+    bike = setup_test_bike(db_session, verified_owner)
 
     # ---------------------------------------------------------
     # STEP 2: AUTHENTICATION
     # ---------------------------------------------------------
     # The customer logs in to get their token
-    token = get_auth_token(client, email="customer@example.com")
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers(verified_customer)
 
     # ---------------------------------------------------------
     # STEP 3: BOOKING REQUEST
@@ -112,19 +112,14 @@ def test_create_booking_success(client, db_session):
     assert data["status"] == "pending"
 
 
-def test_create_booking_overlapping_dates_fails(client, db_session):
+def test_create_booking_overlapping_dates_fails(client, verified_owner, verified_customer, auth_headers, db_session):
     """
     The 'Business Logic Path': Ensure a user cannot book a bike if someone 
     else has already booked it for those exact dates (Double Booking Prevention).
     """
-    owner = setup_verified_user(db_session, email="owner@example.com")
-    owner.user_type = "shop_owner"
-    db_session.commit()
-
-    customer1 = setup_verified_user(db_session, email="customer1@example.com")
     customer2 = setup_verified_user(db_session, email="customer2@example.com")
     
-    bike = setup_test_bike(db_session, owner)
+    bike = setup_test_bike(db_session, verified_owner)
 
     # Define the rental period (Tomorrow -> 3 days from now)
     start_time = tz.now() + timedelta(days=1)
@@ -134,7 +129,7 @@ def test_create_booking_overlapping_dates_fails(client, db_session):
     # STEP 1: Customer 1 books the bike successfully
     # ---------------------------------------------------------
     existing_booking = Booking(
-        customer_id=customer1.id,
+        customer_id=verified_customer.id,
         bike_id=bike.id,
         start_time=start_time,
         end_time=end_time,
@@ -147,8 +142,7 @@ def test_create_booking_overlapping_dates_fails(client, db_session):
     # ---------------------------------------------------------
     # STEP 2: Customer 2 tries to book the SAME bike for the SAME dates
     # ---------------------------------------------------------
-    token2 = get_auth_token(client, email="customer2@example.com")
-    headers2 = {"Authorization": f"Bearer {token2}"}
+    headers2 = auth_headers(customer2)
 
     booking_data = {
         "bike_id": bike.id,

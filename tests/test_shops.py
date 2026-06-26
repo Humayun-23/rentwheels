@@ -10,39 +10,22 @@
 # (GET, POST, etc.) directly to our FastAPI application without needing a real server.
 from fastapi.testclient import TestClient
 
-# We import our custom helper functions from test_users.py. 
-# This saves us from rewriting the same "create user" and "login" code in every file!
-from tests.test_users import setup_verified_user, get_auth_token
+# We use our custom fixtures from conftest.py instead of imports.
 
-def test_create_shop_as_shop_owner_success(client, db_session):
+def test_create_shop_as_shop_owner_success(client, verified_owner, auth_headers):
     """
     Test the "Happy Path": A user with the 'shop_owner' role CAN create a shop.
     """
     # ---------------------------------------------------------
     # STEP 1: DATABASE SETUP (Creating the user)
     # ---------------------------------------------------------
-    # We use our helper function to insert a verified user into the database.
-    # The `db_session` fixture (from conftest.py) gives us a fresh, isolated database transaction.
-    owner = setup_verified_user(db_session, email="owner@example.com", user_id=None)
-    
-    # By default, setup_verified_user creates a "customer". 
-    # Since we are testing shop owner privileges, we manually change the role.
-    owner.user_type = "shop_owner"
-    
-    # We commit the change so it is permanently saved in this test's database transaction.
-    db_session.commit()
+    # The `verified_owner` fixture creates a user with `user_type = "shop_owner"`.
 
     # ---------------------------------------------------------
     # STEP 2: AUTHENTICATION (Getting the digital ID card)
     # ---------------------------------------------------------
-    # We call the login endpoint using our helper function.
-    # This simulates the user typing their email/password into a login form.
-    # The backend verifies them and returns a JWT (JSON Web Token).
-    token = get_auth_token(client, email="owner@example.com")
-    
-    # We attach the token to the Authorization header. 
-    # The string "Bearer " is required by the OAuth2 standard.
-    headers = {"Authorization": f"Bearer {token}"}
+    # We use our fixture to get the auth headers.
+    headers = auth_headers(verified_owner)
 
     # ---------------------------------------------------------
     # STEP 3: API REQUEST (Sending the data)
@@ -77,7 +60,7 @@ def test_create_shop_as_shop_owner_success(client, db_session):
     assert data["city"] == "Denver"
 
 
-def test_create_shop_as_customer_forbidden(client, db_session):
+def test_create_shop_as_customer_forbidden(client, verified_customer, auth_headers):
     """
     Test the "Negative Path": A user with the 'customer' role CANNOT create a shop.
     This guarantees our security permissions are working.
@@ -85,17 +68,12 @@ def test_create_shop_as_customer_forbidden(client, db_session):
     # ---------------------------------------------------------
     # STEP 1: DATABASE SETUP
     # ---------------------------------------------------------
-    # We create a verified user. Because we don't change `user_type`, 
-    # it defaults to "customer".
-    customer = setup_verified_user(db_session, email="customer@example.com")
+    # We use the verified_customer fixture.
 
     # ---------------------------------------------------------
     # STEP 2: AUTHENTICATION
     # ---------------------------------------------------------
-    # The customer logs in successfully and gets a valid token.
-    # (Just because you are logged in doesn't mean you have permission to do everything!)
-    token = get_auth_token(client, email="customer@example.com")
-    headers = {"Authorization": f"Bearer {token}"}
+    headers = auth_headers(verified_customer)
 
     # ---------------------------------------------------------
     # STEP 3: HACKING ATTEMPT

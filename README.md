@@ -13,11 +13,12 @@ RentWheels is a comprehensive platform connecting shop owners with customers loo
 
 ## ✨ Key Features
 
-- **🔐 Robust Security**: JWT-based authentication with role-based access control (Admin, Shop Owner, Customer), bcrypt password hashing, and admin IP allowlisting.
+- **🔐 Robust Security**: JWT-based authentication, bcrypt password hashing, email verification, and scoped shop ownership checks.
 - **🛍️ Multi-Tenant Support**: Full support for multiple rental shops, each managing their own unique inventory, bookings, and customer reviews.
 - **🔍 Advanced Search**: Search vehicles by type, engine displacement (CC), availability dates, and specific shops.
 - **📦 Reliable Inventory Management**: Concurrency-safe inventory tracking using row-level locking to prevent double-bookings and race conditions.
 - **📅 Complete Booking Lifecycle**: Manages bookings through a clear state machine: `pending` → `confirmed` → `completed` → `cancelled`.
+- **🏪 RentalOS Counter System**: Separate offline rental desk APIs for catalog, customer lookup, offline bookings, Azure document/handover uploads, payment tracking, trip completion, notes, customer flags, and owner-managed staff access.
 - **⭐ Verified Reviews**: Prevents spam by ensuring users can only leave reviews after completing a booking.
 - **🛡️ Operational Stability**: Built-in rate limiting, input sanitization, structural logging, and health checks for production readiness.
 
@@ -64,14 +65,16 @@ secret_key=your-secret-key-minimum-32-characters
 algorithm=HS256
 access_token_expire_minutes=30
 
-# Admin Access
-admin_token=your-admin-token
-admin_allowed_hosts=127.0.0.1,::1
-
 # Environment Details
 environment=development
 debug=true
 cors_origins=http://localhost:3000,http://127.0.0.1:3000
+
+# RentalOS Azure Blob Storage
+AZURE_STORAGE_CONNECTION_STRING=
+AZURE_STORAGE_RENTALOS_CONTAINER=
+AZURE_STORAGE_RENTALOS_MAX_UPLOAD_MB=5
+AZURE_STORAGE_RENTALOS_PUBLIC_BASE_URL=
 ```
 
 ### 3. Database Setup & Run
@@ -118,16 +121,32 @@ The API is versioned at `/api/v1`. All endpoints (except auth and public search)
 
 | Domain | Key Endpoints | Description |
 | :--- | :--- | :--- |
-| **Auth** | `/login`, `/admin/login` | Token generation |
+| **Auth** | `/login`, `/google` | Token generation |
 | **Users** | `/users/` | User registration and management |
 | **Shops** | `/shops/` | Shop creation and management |
 | **Vehicles**| `/bikes/`, `/search/vehicles/` | Vehicle listings and advanced search |
 | **Bookings**| `/bookings/` | Reservation lifecycle management |
 | **Inventory**|`/inventory/` | Stock tracking and adjustments |
 | **Reviews** | `/reviews/` | Verified customer feedback |
+| **RentalOS** | `/rentalos/*` | Offline counter catalog, customer lookup, bookings, uploads, payments, completion, notes, flags, and staff management |
 | **System** | `/password-reset/*` | Account recovery |
 
 *For complete endpoint details, request payloads, and response schemas, refer to the automatically generated [Swagger UI](http://localhost:8000/docs) after starting the server.*
+
+## 🏪 RentalOS Notes
+
+RentalOS is separate from the online marketplace flow.
+
+- Staff and owners log in through the normal `POST /api/v1/login` endpoint.
+- Frontend should call `GET /api/v1/rentalos/me` after login to decide whether to show owner RentalOS, staff RentalOS, or no RentalOS access.
+- Owners are resolved through `Shop.owner_id == current_user.id`.
+- Staff are normal `User` rows with active `RentalStaff` membership.
+- Staff management endpoints are owner-only: `POST /rentalos/staff`, `GET /rentalos/staff?shop_id=...`, `PATCH /rentalos/staff/{staff_id}`.
+- RentalOS documents and handover photos use Azure Blob Storage, not Cloudinary.
+- Marketplace bike/shop images still use Cloudinary.
+- RentalOS payments use `RentalPayment`; Razorpay marketplace payments use `Payment`.
+
+See [docs/rentalos-frontend-handoff.md](docs/rentalos-frontend-handoff.md) for frontend integration details.
 
 ---
 
@@ -136,7 +155,7 @@ The API is versioned at `/api/v1`. All endpoints (except auth and public search)
 Run the test suite using pytest:
 
 ```bash
-pytest
+.venv/bin/pytest
 ```
 
 ---
@@ -147,13 +166,13 @@ pytest
 backend/
 ├── app/                 # Main FastAPI application source code
 │   ├── main.py          # App entrypoint
-│   ├── api/             # Route handlers
-│   ├── core/            # Config, security, database sessions
-│   ├── models/          # SQLAlchemy database models
+│   ├── api/v1/          # Route handlers
+│   ├── db/              # SQLAlchemy database setup and models
 │   ├── schemas/         # Pydantic validation schemas
-│   └── services/        # Business logic
+│   └── utils/           # Auth, uploads, email, logging, timezone helpers
 ├── alembic/             # Database migration scripts
-├── scripts/             # Utility and database seeding scripts
+├── docs/                # RentalOS/frontend/backend handoff documentation
+├── tests/               # Pytest test suite
 ├── alembic.ini          # Alembic configuration
 ├── requirements.txt     # Python dependencies
 ├── Dockerfile           # Container build instructions
@@ -170,7 +189,9 @@ When deploying to production, ensure the following steps are taken:
    - Set `environment=production`
    - Set `debug=false` (This disables the Swagger UI docs for security)
    - Ensure `cors_origins` is strictly limited to your frontend domain(s)
-   - Use strong, randomly generated secrets for `secret_key` and `admin_token`
+   - Use a strong, randomly generated value for `secret_key`
    - Use a managed PostgreSQL instance for reliability and backups
+   - Configure a private Azure Blob container for RentalOS document/handover uploads
+   - Add signed/authenticated RentalOS file access before exposing sensitive documents in production
 2. **Reverse Proxy**: Serve the API behind a reverse proxy like Nginx or Traefik to handle SSL/TLS (HTTPS).
 3. **Process Management**: Run the application via `gunicorn` with `uvicorn` workers for optimal performance.
