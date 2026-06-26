@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import and_, func
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,7 +11,6 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import (
     Bike,
-    Booking,
     RentalBooking,
     RentalBookingDocument,
     RentalBookingNote,
@@ -22,6 +21,10 @@ from app.db.models import (
     RentalStaff,
     Shop,
     User,
+)
+from app.services.availability import (
+    MAINTENANCE_STATUSES,
+    check_bike_availability_by_id,
 )
 from app.schemas.rentalos import (
     CatalogVehicleResponse,
@@ -57,9 +60,6 @@ from app.utils.utils import hash_password
 
 router = APIRouter(prefix="/rentalos", tags=["rentalos"])
 
-ONLINE_CONFLICT_STATUSES = ["pending", "paid", "confirmed"]
-RENTALOS_CONFLICT_STATUSES = ["draft", "confirmed", "active"]
-MAINTENANCE_STATUSES = {"maintenance", "repair", "cleaning"}
 DOCUMENT_TYPES = {"driving_license", "id_proof"}
 DOCUMENT_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
 HANDOVER_PHOTO_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -162,74 +162,14 @@ def get_accessible_rental_customer(db: Session, customer_id: int, current_user: 
     return customer
 
 
-def _overlap_filter(model, start_time: datetime, end_time: datetime):
-    return and_(model.start_time < end_time, model.end_time > start_time)
-
-
-def validate_rentalos_bike_status(bike: Bike) -> tuple[bool, str | None]:
-    if not bike.is_available:
-        return False, "Bike is unavailable."
-
-    if bike.maintenance_status in MAINTENANCE_STATUSES:
-        return False, "Bike is under maintenance."
-
-    return True, None
-
-
-def has_rentalos_booking_conflict(
-    db: Session,
-    bike_id: int,
-    start_time: datetime,
-    end_time: datetime,
-) -> tuple[bool, str | None]:
-    # TODO: Existing online booking creation should use this same shared bike
-    # lock and availability service before it creates Booking rows.
-    online_conflict = (
-        db.query(Booking.id)
-        .filter(
-            Booking.bike_id == bike_id,
-            Booking.status.in_(ONLINE_CONFLICT_STATUSES),
-            _overlap_filter(Booking, start_time, end_time),
-        )
-        .first()
-    )
-    if online_conflict:
-        return True, "Vehicle is already booked for this time."
-
-    rentalos_conflict = (
-        db.query(RentalBooking.id)
-        .filter(
-            RentalBooking.bike_id == bike_id,
-            RentalBooking.status.in_(RENTALOS_CONFLICT_STATUSES),
-            _overlap_filter(RentalBooking, start_time, end_time),
-        )
-        .first()
-    )
-    if rentalos_conflict:
-        return True, "Vehicle is already booked for this time."
-
-    return False, None
-
-
 def is_bike_available_for_rentalos(
     db: Session,
     bike_id: int,
     start_time: datetime,
     end_time: datetime,
 ) -> tuple[bool, str | None]:
-    bike = db.query(Bike).filter(Bike.id == bike_id).first()
-    if not bike:
-        return False, "Bike not found."
-
-    status_ok, reason = validate_rentalos_bike_status(bike)
-    if not status_ok:
-        return False, reason
-
-    has_conflict, reason = has_rentalos_booking_conflict(db, bike_id, start_time, end_time)
-    if has_conflict:
-        return False, reason
-
-    return True, None
+    _, _, availability = check_bike_availability_by_id(db, bike_id, start_time, end_time)
+    return availability.is_available, availability.reason
 
 
 def _validate_time_range(start_time: datetime, end_time: datetime) -> tuple[datetime, datetime]:
@@ -760,7 +700,13 @@ def create_rental_booking(
     _, staff = assert_rentalos_shop_access(db, booking.shop_id, current_user)
     start_time, end_time = _validate_time_range(booking.start_time, booking.end_time)
 
-    bike = db.query(Bike).filter(Bike.id == booking.bike_id).with_for_update().first()
+    bike, _inventory, availability = check_bike_availability_by_id(
+        db,
+        booking.bike_id,
+        start_time,
+        end_time,
+        lock=True,
+    )
     if not bike:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -772,18 +718,13 @@ def create_rental_booking(
             detail="Bike does not belong to this shop.",
         )
 
-    status_ok, reason = validate_rentalos_bike_status(bike)
-    if not status_ok:
+    if not availability.is_available:
+        detail = availability.reason or "Vehicle is already booked for this time."
+        if "fully booked" in detail.lower():
+            detail = "Vehicle is already booked for this time."
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=reason or "Bike is unavailable.",
-        )
-
-    has_conflict, reason = has_rentalos_booking_conflict(db, bike.id, start_time, end_time)
-    if has_conflict:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=reason or "Vehicle is already booked for this time.",
+            detail=detail,
         )
 
     customer = (

@@ -13,7 +13,7 @@ from app.utils import tz
 
 # We import our database models so we can manually insert "fake" data
 # for our tests to interact with.
-from app.db.models import Shop, Bike, BikeInventory, Booking, User
+from app.db.models import Shop, Bike, BikeInventory, Booking, User, RentalBooking, RentalCustomer
 from app.utils.utils import hash_password
 
 def setup_verified_user(db_session, email="owner@example.com"):
@@ -160,3 +160,153 @@ def test_create_booking_overlapping_dates_fails(client, verified_owner, verified
     # because the bike is unavailable.
     assert response.status_code == 400
     assert "fully booked" in response.json()["detail"].lower()
+
+
+def test_rentalos_booking_blocks_marketplace_booking(
+    client,
+    owner_shop,
+    owner_bike,
+    verified_customer,
+    staff_user,
+    auth_headers,
+    db_session,
+):
+    start_time = tz.now() + timedelta(days=1)
+    end_time = start_time + timedelta(hours=4)
+    rental_customer = RentalCustomer(
+        shop_id=owner_shop.id,
+        phone_number="7000000001",
+        firstname="Offline",
+        lastname="Customer",
+        created_by_user_id=staff_user.id,
+    )
+    db_session.add(rental_customer)
+    db_session.flush()
+    db_session.add(
+        RentalBooking(
+            shop_id=owner_shop.id,
+            customer_id=rental_customer.id,
+            bike_id=owner_bike.id,
+            start_time=start_time,
+            end_time=end_time,
+            status="confirmed",
+        )
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/bookings/",
+        headers=auth_headers(verified_customer),
+        json={
+            "bike_id": owner_bike.id,
+            "utr_number": "123456789012",
+            "start_time": (start_time + timedelta(hours=1)).isoformat(),
+            "end_time": (end_time + timedelta(hours=1)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 400
+    assert "fully booked" in response.json()["detail"].lower()
+
+
+def test_marketplace_booking_can_use_non_overlapping_rentalos_window(
+    client,
+    owner_shop,
+    owner_bike,
+    verified_customer,
+    staff_user,
+    auth_headers,
+    db_session,
+):
+    rental_start = tz.now() + timedelta(days=1)
+    rental_end = rental_start + timedelta(hours=2)
+    rental_customer = RentalCustomer(
+        shop_id=owner_shop.id,
+        phone_number="7000000002",
+        created_by_user_id=staff_user.id,
+    )
+    db_session.add(rental_customer)
+    db_session.flush()
+    db_session.add(
+        RentalBooking(
+            shop_id=owner_shop.id,
+            customer_id=rental_customer.id,
+            bike_id=owner_bike.id,
+            start_time=rental_start,
+            end_time=rental_end,
+            status="confirmed",
+        )
+    )
+    db_session.commit()
+
+    response = client.post(
+        "/api/v1/bookings/",
+        headers=auth_headers(verified_customer),
+        json={
+            "bike_id": owner_bike.id,
+            "utr_number": "123456789012",
+            "start_time": rental_end.isoformat(),
+            "end_time": (rental_end + timedelta(hours=2)).isoformat(),
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["bike_id"] == owner_bike.id
+
+
+def test_marketplace_booking_update_cannot_move_into_rentalos_window(
+    client,
+    owner_shop,
+    owner_bike,
+    verified_customer,
+    staff_user,
+    auth_headers,
+    db_session,
+):
+    online_start = tz.now() + timedelta(days=1)
+    online_end = online_start + timedelta(hours=2)
+    create_response = client.post(
+        "/api/v1/bookings/",
+        headers=auth_headers(verified_customer),
+        json={
+            "bike_id": owner_bike.id,
+            "utr_number": "123456789012",
+            "start_time": online_start.isoformat(),
+            "end_time": online_end.isoformat(),
+        },
+    )
+    assert create_response.status_code == 201
+    booking_id = create_response.json()["id"]
+
+    rental_start = online_end + timedelta(hours=2)
+    rental_end = rental_start + timedelta(hours=2)
+    rental_customer = RentalCustomer(
+        shop_id=owner_shop.id,
+        phone_number="7000000003",
+        created_by_user_id=staff_user.id,
+    )
+    db_session.add(rental_customer)
+    db_session.flush()
+    db_session.add(
+        RentalBooking(
+            shop_id=owner_shop.id,
+            customer_id=rental_customer.id,
+            bike_id=owner_bike.id,
+            start_time=rental_start,
+            end_time=rental_end,
+            status="confirmed",
+        )
+    )
+    db_session.commit()
+
+    update_response = client.put(
+        f"/api/v1/bookings/{booking_id}",
+        headers=auth_headers(verified_customer),
+        json={
+            "start_time": (rental_start + timedelta(minutes=15)).isoformat(),
+            "end_time": (rental_end + timedelta(minutes=15)).isoformat(),
+        },
+    )
+
+    assert update_response.status_code == 400
+    assert "fully booked" in update_response.json()["detail"].lower()
