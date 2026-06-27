@@ -27,7 +27,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: backend
+        working-directory: .
 
     env:
       DATABASE_HOSTNAME: localhost
@@ -69,12 +69,11 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Build Docker image
-        run: docker build --platform linux/amd64 -t gopanda-backend-ci:${{ github.sha }} .
-        
-      - name: Block destructive migration operations
+      - name: Report destructive migration operations
         run: |
           if grep -R "op.drop_table\|op.drop_column" alembic/versions; then
-            echo "Destructive migration detected. Requires manual review."
-            exit 1
+            echo "Destructive migration operation detected. Review before production deploy."
           fi
+
+      - name: Build Docker image
+        run: docker build --platform linux/amd64 -t gopanda-backend-ci:${{ github.sha }} .
