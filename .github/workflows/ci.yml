@@ -1,0 +1,80 @@
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gopanda_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      DATABASE_HOSTNAME: localhost
+      DATABASE_PORT: "5432"
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      DATABASE_NAME: gopanda_test
+      SECRET_KEY: test-secret
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+      CORS_ORIGINS: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile Python
+        run: python -m compileall app alembic/versions
+
+      - name: Check Alembic has exactly one head
+        run: |
+          count=$(alembic heads | wc -l)
+          echo "Alembic heads: $count"
+          test "$count" -eq 1
+
+      - name: Apply migrations on disposable Postgres
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest
+
+      - name: Build Docker image
+        run: docker build --platform linux/amd64 -t gopanda-backend-ci:${{ github.sha }} .
+        
+      - name: Block destructive migration operations
+        run: |
+          if grep -R "op.drop_table\|op.drop_column" alembic/versions; then
+            echo "Destructive migration detected. Requires manual review."
+            exit 1
+          fi

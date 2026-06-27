@@ -1,41 +1,48 @@
 name: Deploy Backend to Azure Container Apps
 
 on:
+  workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+    environment: production
+
+    defaults:
+      run:
+        working-directory: backend
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Log in to Azure
+      - name: Azure login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Log in to Azure Container Registry
-        run: |
-          az acr login --name gopandaacr21358
+      - name: Login to ACR
+        run: az acr login --name gopandaacr21358
 
-      - name: Build and Push Docker image
+      - name: Build image
         run: |
-          # Build the image using the github commit hash as a unique tag
-          docker build --platform linux/amd64 -t gopandaacr21358.azurecr.io/gopanda-backend:${{ github.sha }} .
-          
-          # Push the image to Azure Container Registry
-          docker push gopandaacr21358.azurecr.io/gopanda-backend:${{ github.sha }}
+          docker build --platform linux/amd64 \
+            -t gopandaacr21358.azurecr.io/gopanda-backend:${{ github.sha }} .
 
-      - name: Deploy to Azure Container Apps
+      - name: Push image
+        run: docker push gopandaacr21358.azurecr.io/gopanda-backend:${{ github.sha }}
+
+      - name: Deploy image to ACA
         uses: azure/cli@v2
         with:
           inlineScript: |
-            # Update the Container App to use the newly pushed image
             az containerapp update \
               --name gopanda-backend \
               --resource-group Gopanda \
               --image gopandaacr21358.azurecr.io/gopanda-backend:${{ github.sha }}
+
+      - name: Health check
+        run: |
+          curl --fail --retry 10 --retry-delay 5 https://api.gopanda.in/health
