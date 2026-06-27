@@ -8,6 +8,6 @@ from slowapi.util import get_remote_address
 # Initialize rate limiter
 
 def get_limiter():
-    return Limiter(key_func=get_remote_address)
+    return Limiter(key_func=get_remote_address, config_filename=None)
 
 limiter = get_limiter() 
