@@ -91,21 +91,7 @@ class Bike(Base):
     bookings = relationship("Booking", back_populates="bike", cascade="all, delete-orphan")
     inventory = relationship("BikeInventory", back_populates="bike", uselist=False, cascade="all, delete-orphan")
     image = relationship("BikeImage", back_populates="bike", cascade="all, delete-orphan")
-    service_logs = relationship("ServiceLog", back_populates="bike", cascade="all, delete-orphan")
     rental_bookings = relationship("RentalBooking", back_populates="bike", cascade="all, delete-orphan")
-
-class ServiceLog(Base):
-    """ServiceLog model - tracks maintenance history for bikes"""
-    __tablename__ = "service_logs"
-
-    id = Column(Integer, primary_key=True, index=True)
-    bike_id = Column(Integer, ForeignKey("bikes.id", ondelete="CASCADE"), nullable=False, index=True)
-    description = Column(String, nullable=False)
-    cost = Column(Integer, nullable=False, default=0)  # Cost in paise
-    service_date = Column(DateTime, default=tz.now)
-    created_at = Column(DateTime, default=tz.now)
-
-    bike = relationship("Bike", back_populates="service_logs", foreign_keys=[bike_id])
 
 
 class BikeImage(Base):
