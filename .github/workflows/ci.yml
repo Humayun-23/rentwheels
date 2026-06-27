@@ -54,6 +54,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Create empty env file for imports
+        run: touch .env
+
       - name: Compile Python
         run: python -m compileall app alembic/versions
 
