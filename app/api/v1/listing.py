@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from app.db.database import get_db
-from app.db.models import Bike, Shop, User, BikeImage, BikeInventory, Review, ServiceLog
-from app.schemas.bikes import BikeCreate, BikeUpdate, BikeOut, ServiceLogCreate, ServiceLogOut
+from app.db.models import Bike, Shop, User, BikeImage, BikeInventory, Review
+from app.schemas.bikes import BikeCreate, BikeUpdate, BikeOut
 from app.api.v1.oauth2 import get_current_user
 from app.utils.cloudinary_client import upload_image
 
@@ -251,56 +251,3 @@ def upload_bike_images(
     db.commit()
     db.refresh(bike)
     return bike
-
-@router.post("/{bike_id}/service-logs", response_model=ServiceLogOut, status_code=status.HTTP_201_CREATED)
-def create_service_log(bike_id: int, log: ServiceLogCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Create a new service log for a bike"""
-    bike = db.query(Bike).filter(Bike.id == bike_id).first()
-    if not bike:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bike not found")
-        
-    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or shop.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-        
-    db_log = ServiceLog(
-        bike_id=bike_id,
-        description=log.description,
-        cost=log.cost,
-        service_date=log.service_date
-    )
-    db.add(db_log)
-    db.commit()
-    db.refresh(db_log)
-    return db_log
-
-@router.get("/{bike_id}/service-logs", response_model=list[ServiceLogOut])
-def get_service_logs(bike_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Get service logs for a bike"""
-    bike = db.query(Bike).filter(Bike.id == bike_id).first()
-    if not bike:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bike not found")
-        
-    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or shop.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-        
-    return db.query(ServiceLog).filter(ServiceLog.bike_id == bike_id).order_by(ServiceLog.service_date.desc()).all()
-
-@router.delete("/{bike_id}/service-logs/{log_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_service_log(bike_id: int, log_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Delete a service log"""
-    bike = db.query(Bike).filter(Bike.id == bike_id).first()
-    if not bike:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bike not found")
-        
-    shop = db.query(Shop).filter(Shop.id == bike.shop_id).first()
-    if not shop or shop.owner_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
-        
-    log = db.query(ServiceLog).filter(ServiceLog.id == log_id, ServiceLog.bike_id == bike_id).first()
-    if not log:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Service log not found")
-        
-    db.delete(log)
-    db.commit()

@@ -1,7 +1,7 @@
 """Add RentalOS database foundation
 
 Revision ID: 7c3a91d4e8f2
-Revises: 42ee243ff209
+Revises: b6d4f2a91c03
 Create Date: 2026-06-26 00:00:00.000000
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = "7c3a91d4e8f2"
-down_revision: Union[str, Sequence[str], None] = "42ee243ff209"
+down_revision: Union[str, Sequence[str], None] = "b6d4f2a91c03"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

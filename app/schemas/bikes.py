@@ -54,16 +54,3 @@ class BikeOut(Bike):
         if self.image:
             return self.image[0].image_url
         return None
-
-class ServiceLogCreate(BaseModel):
-    description: str
-    cost: int = 0
-    service_date: Optional[datetime] = None
-
-class ServiceLogOut(ServiceLogCreate):
-    id: int
-    bike_id: int
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
-
