@@ -120,15 +120,17 @@ def create_user(request: Request, user: UserCreate, background_tasks: Background
         raise
     except IntegrityError as exc:
         db.rollback()
+        logger.error(f"Integrity error creating user: {exc}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Error creating user: {exc.orig}"
+            detail="Error creating user: Invalid data or user already exists."
         )
     except Exception as e:
         db.rollback()
+        logger.exception("Unexpected error creating user")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail="An unexpected error occurred. Please try again later."
         )
 
 

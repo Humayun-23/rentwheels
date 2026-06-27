@@ -48,7 +48,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.get_cors_origins(),
-    allow_origin_regex=r"https://(ride-elegance-[a-zA-Z0-9-]+-.*\.vercel\.app|ride-elegance\.vercel\.app)",
+    allow_origin_regex=r"https://(ride-elegance-[a-zA-Z0-9-]+-.*\.vercel\.app|ride-elegance\.vercel\.app)" if settings.environment != "production" else None,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],  # ✅ FIXED: Explicit methods
     allow_headers=["Content-Type", "Authorization"],  # ✅ FIXED: Explicit headers

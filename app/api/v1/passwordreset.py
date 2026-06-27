@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from datetime import timedelta
 from app.utils import tz
@@ -18,6 +18,7 @@ from app.schemas.password_reset import (
 )
 
 from app.utils.utils import hash_password
+from app.utils.limiter import limiter
 
 router = APIRouter(prefix="/password-reset", tags=["password-reset"])
 logger = logging.getLogger(__name__)
@@ -33,7 +34,8 @@ def send_email_background(host: str, port: int, user: str, password: str, msg: E
 
 
 @router.post("/request", response_model=PasswordResetResponse, status_code=status.HTTP_200_OK)
-def request_password_reset(reset_request: PasswordResetRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def request_password_reset(request: Request, reset_request: PasswordResetRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Request a password reset token.
     In production, this should send an email with the reset link.
@@ -95,7 +97,9 @@ def request_password_reset(reset_request: PasswordResetRequest, background_tasks
 
 
 @router.post("/confirm", response_model=PasswordResetResponse, status_code=status.HTTP_200_OK)
+@limiter.limit("5/minute")
 def confirm_password_reset(
+    request: Request,
     reset_confirm: PasswordResetConfirm,
     db: Session = Depends(get_db)
 ):
