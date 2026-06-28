@@ -6,6 +6,29 @@ from starlette.responses import Response
 import time
 import sys
 import json
+from datetime import datetime, timezone
+
+
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        message = record.getMessage()
+
+        try:
+            if message.startswith("{") and message.endswith("}"):
+                parsed = json.loads(message)
+                if isinstance(parsed, dict):
+                    return message
+        except (ValueError, TypeError):
+            pass
+
+        log_obj = {
+            "level": record.levelname,
+            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "message": message,
+        }
+        if record.exc_info:
+            log_obj["exception"] = self.formatException(record.exc_info)
+        return json.dumps(log_obj)
 
 
 def configure_logging():
@@ -22,25 +45,16 @@ def configure_logging():
         cache_logger_on_first_use=True,
     )
     
-    # Configure Python's standard logging with JSON output
-    handler = logging.StreamHandler(sys.stdout)
     root_logger = logging.getLogger()
+    root_logger.handlers = [
+        handler
+        for handler in root_logger.handlers
+        if not isinstance(handler.formatter, JSONFormatter)
+    ]
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JSONFormatter())
     root_logger.addHandler(handler)
     root_logger.setLevel(logging.INFO)
-    
-    # Simple JSON formatter for stdlib logging
-    class JSONFormatter(logging.Formatter):
-        def format(self, record):
-            log_obj = {
-                "level": record.levelname,
-                "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S.%fZ"),
-                "message": record.getMessage(),
-            }
-            if record.exc_info:
-                log_obj["exception"] = self.formatException(record.exc_info)
-            return json.dumps(log_obj)
-    
-    handler.setFormatter(JSONFormatter())
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):

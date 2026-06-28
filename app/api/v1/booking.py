@@ -1,10 +1,12 @@
 import secrets
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Query, BackgroundTasks
 from fastapi.responses import HTMLResponse
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from app.utils import tz
 
 from app.utils.limiter import limiter
+from app.utils.logging_config import get_logger
 from app.db.database import get_db
 from app.db.models import Booking, Bike, BikeInventory, User, Shop, Payment
 from app.schemas.booking import BookingCreate, BookingUpdate, BookingOut
@@ -12,6 +14,7 @@ from app.api.v1.oauth2 import get_current_user
 from app.services.availability import check_bike_availability_by_id
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
+logger = get_logger()
 
 
 def calculate_booking_price(bike: Bike, start_time, end_time) -> int:
@@ -128,9 +131,33 @@ def create_booking(request: Request, booking: BookingCreate, background_tasks: B
     inventory.available_quantity -= 1
     inventory.rented_quantity += 1
 
-    db.add(db_booking)
-    db.commit()
-    db.refresh(db_booking)
+    try:
+        logger.bind(
+            customer_id=current_user.id,
+            bike_id=booking.bike_id,
+            start_time=start_time.isoformat(),
+            end_time=end_time.isoformat(),
+            total_price=total_price,
+        ).info("booking_create_started")
+        db.add(db_booking)
+        db.commit()
+        db.refresh(db_booking)
+        logger.bind(
+            booking_id=db_booking.id,
+            customer_id=current_user.id,
+            bike_id=booking.bike_id,
+        ).info("booking_create_committed")
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.bind(
+            customer_id=current_user.id,
+            bike_id=booking.bike_id,
+            error=str(exc),
+        ).exception("booking_create_failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Booking could not be saved. Please try again.",
+        )
     
     # Send Email Receipt
     try:
