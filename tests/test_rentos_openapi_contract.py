@@ -9,6 +9,7 @@ def test_rentalos_openapi_route_contract():
         "/api/v1/rentalos/staff/{staff_id}": {"patch"},
         "/api/v1/rentalos/bookings": {"get", "post"},
         "/api/v1/rentalos/bookings/{booking_id}": {"get"},
+        "/api/v1/rentalos/bookings/{booking_id}/cancel": {"post"},
         "/api/v1/rentalos/bookings/{booking_id}/documents": {"get", "post"},
         "/api/v1/rentalos/bookings/{booking_id}/handover-photo": {"post"},
         "/api/v1/rentalos/bookings/{booking_id}/handover-photos": {"get"},

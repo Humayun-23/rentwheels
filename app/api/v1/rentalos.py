@@ -864,6 +864,35 @@ def get_rental_booking(
     return booking
 
 
+@router.post("/bookings/{booking_id}/cancel", response_model=RentalBookingResponse)
+def cancel_rental_booking(
+    booking_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Cancel a RentalOS booking and free the vehicle for that time window."""
+    booking = get_accessible_rental_booking(db, booking_id, current_user)
+    if booking.status == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot cancel a completed booking.",
+        )
+    if booking.status == "cancelled":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Booking is already cancelled.",
+        )
+
+    booking.status = "cancelled"
+    db.commit()
+    return (
+        db.query(RentalBooking)
+        .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
+        .filter(RentalBooking.id == booking.id)
+        .first()
+    )
+
+
 @router.post(
     "/bookings/{booking_id}/documents",
     response_model=RentalBookingDocumentResponse,

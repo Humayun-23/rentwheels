@@ -66,7 +66,7 @@ def test_customer_books_vehicle_from_marketplace_end_to_end(
     booking_payload = booking_response.json()
     assert booking_payload["customer_id"] == verified_customer.id
     assert booking_payload["bike_id"] == owner_bike.id
-    assert booking_payload["status"] == "pending"
+    assert booking_payload["status"] == "confirmed"
     assert booking_payload["total_price"] == 200
     assert booking_payload["token_amount"] == 299
 
@@ -97,7 +97,7 @@ def test_customer_books_vehicle_from_marketplace_end_to_end(
     assert booking is not None
     assert booking.customer_id == verified_customer.id
     assert booking.bike_id == owner_bike.id
-    assert booking.status == "pending"
+    assert booking.status == "confirmed"
     assert booking.total_price == 200
     assert booking.utr_number == "123456789012"
     assert inventory.available_quantity == 0

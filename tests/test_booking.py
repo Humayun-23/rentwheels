@@ -108,8 +108,17 @@ def test_create_booking_success(client, verified_owner, verified_customer, auth_
     # Assert the booking is linked to the correct bike
     assert data["bike_id"] == bike.id
     
-    # Assert the booking starts in "pending" status (awaiting shop owner approval)
-    assert data["status"] == "pending"
+    # Assert the booking is confirmed after customer submits the UTR
+    assert data["status"] == "confirmed"
+
+    accept_response = client.get(
+        f"/api/v1/bookings/{data['id']}/magic-action",
+        params={"action": "accept", "token": data["magic_token"]},
+    )
+    assert accept_response.status_code == 200
+    db_session.expire_all()
+    saved_booking = db_session.query(Booking).filter(Booking.id == data["id"]).first()
+    assert saved_booking.status == "confirmed"
 
 
 def test_create_booking_overlapping_dates_fails(client, verified_owner, verified_customer, auth_headers, db_session):
@@ -309,4 +318,4 @@ def test_marketplace_booking_update_cannot_move_into_rentalos_window(
     )
 
     assert update_response.status_code == 400
-    assert "fully booked" in update_response.json()["detail"].lower()
+    assert "only pending bookings can be updated" in update_response.json()["detail"].lower()

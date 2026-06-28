@@ -67,6 +67,45 @@ def test_trip_completion(client: TestClient, owner_shop, owner_bike, rental_book
     assert cat_data[0]["is_available"] == True
     assert cat_data[0]["rentalos_availability_status"] == "available"
 
+
+def test_cancel_booking_frees_vehicle(client: TestClient, owner_shop, rental_booking, verified_owner, auth_headers):
+    headers = auth_headers(verified_owner)
+
+    cancel_response = client.post(
+        f"/api/v1/rentalos/bookings/{rental_booking.id}/cancel",
+        headers=headers,
+    )
+    assert cancel_response.status_code == 200
+    assert cancel_response.json()["status"] == "cancelled"
+
+    cat_response = client.get(
+        (
+            f"/api/v1/rentalos/catalog/vehicles?shop_id={owner_shop.id}"
+            f"&start_time={rental_booking.start_time.isoformat()}"
+            f"&end_time={rental_booking.end_time.isoformat()}"
+        ),
+        headers=headers,
+    )
+    cat_data = cat_response.json()
+    assert cat_data[0]["rentalos_availability_status"] == "available"
+
+
+def test_cannot_cancel_completed_booking(client: TestClient, rental_booking, verified_owner, auth_headers):
+    headers = auth_headers(verified_owner)
+    client.post(
+        f"/api/v1/rentalos/bookings/{rental_booking.id}/complete",
+        headers=headers,
+        json={},
+    )
+
+    cancel_response = client.post(
+        f"/api/v1/rentalos/bookings/{rental_booking.id}/cancel",
+        headers=headers,
+    )
+    assert cancel_response.status_code == 400
+    assert "completed" in cancel_response.json()["detail"].lower()
+
+
 def test_payment_on_completed_booking(client: TestClient, rental_booking, verified_owner, auth_headers):
     headers = auth_headers(verified_owner)
     

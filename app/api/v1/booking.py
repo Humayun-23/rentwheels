@@ -120,11 +120,12 @@ def create_booking(request: Request, booking: BookingCreate, background_tasks: B
         bike_id=booking.bike_id,
         start_time=start_time,
         end_time=end_time,
-        status="pending",
+        status="confirmed",
         total_price=total_price,
         magic_token=secrets.token_urlsafe(16),
         utr_number=getattr(booking, "utr_number", None),
         token_amount=token_amount,
+        confirmed_at=tz.now(),
     )
 
     # Decrement inventory to mark it as booked/unavailable
@@ -538,6 +539,9 @@ def magic_action(booking_id: int, action: str, token: str, background_tasks: Bac
         
     if booking.status == "cancelled":
         return render_html("!", "#f59e0b", "Already Cancelled", "This booking has already been cancelled.")
+
+    if action in {"accept", "confirm"}:
+        return render_html("&#10003;", "#22c55e", "Already Confirmed", "This booking was confirmed when the customer submitted the UTR.")
 
     if action == "reject":
         # Restore inventory when rejecting via magic link
