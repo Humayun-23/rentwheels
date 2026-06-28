@@ -28,6 +28,7 @@ slowapi==0.1.5
 
 ##logging
 structlog==23.2.0
+ddtrace==4.10.5
 
 ## Sanitization
 bleach==6.1.0

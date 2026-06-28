@@ -17,4 +17,8 @@ RUN touch /app/.env
 
 EXPOSE 8000
 
-CMD ["gunicorn", "app.main:app", "--workers", "4", "--worker-class", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--forwarded-allow-ips='*'"]
+COPY --from=datadog/serverless-init:1 /datadog-init /app/datadog-init
+
+ENTRYPOINT ["/app/datadog-init"]
+
+CMD ["ddtrace-run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
