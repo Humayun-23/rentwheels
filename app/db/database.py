@@ -1,6 +1,5 @@
 import os
 from sqlalchemy import create_engine, event
-from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import declarative_base, sessionmaker
 from starlette.responses import Response
 from app.config import settings
@@ -11,15 +10,16 @@ from app.config import settings
 # Add sslmode=require for cloud databases like Neon
 DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}?sslmode=require"
 
-# Using NullPool for Neon serverless free tier. 
-# This disables connection pooling, allowing the database to scale to zero 
-# and save compute hours when the backend is idle.
 engine = create_engine(
     DATABASE_URL,
-    poolclass=NullPool,
-    echo=os.getenv("SQL_ECHO", "false").lower() == "true",  # Debug logging
+    pool_pre_ping=True,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "5")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "10")),
+    pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "300")),
+    pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
     connect_args={
-        "connect_timeout": 10,  # 10 second connection timeout
+        "connect_timeout": 10,
     } if "sqlite" not in DATABASE_URL else {"check_same_thread": False}
 )
 
