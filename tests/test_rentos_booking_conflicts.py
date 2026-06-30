@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 from datetime import timedelta
 from app.utils import tz
-from app.db.models import Booking
+from app.db.models import Booking, RentalBooking
 
 def test_catalog_maintenance_status(client: TestClient, owner_shop, owner_bike, verified_owner, auth_headers, db_session):
     headers = auth_headers(verified_owner)
@@ -20,6 +20,27 @@ def test_catalog_maintenance_status(client: TestClient, owner_shop, owner_bike, 
     response = client.get(f"/api/v1/rentalos/catalog/vehicles?shop_id={owner_shop.id}", headers=headers)
     data = response.json()
     assert data[0]["is_available"] == False
+
+def test_catalog_marks_upcoming_rentalos_booking_as_booked(client: TestClient, owner_shop, owner_bike, rental_customer, verified_owner, auth_headers, db_session):
+    headers = auth_headers(verified_owner)
+    now = tz.now()
+
+    rental_booking = RentalBooking(
+        shop_id=owner_shop.id,
+        customer_id=rental_customer.id,
+        bike_id=owner_bike.id,
+        start_time=now + timedelta(hours=1),
+        end_time=now + timedelta(hours=3),
+        status="confirmed",
+    )
+    db_session.add(rental_booking)
+    db_session.commit()
+
+    response = client.get(f"/api/v1/rentalos/catalog/vehicles?shop_id={owner_shop.id}", headers=headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data[0]["rentalos_availability_status"] == "booked"
 
 def test_online_paid_booking_conflict(client: TestClient, owner_shop, owner_bike, rental_customer, verified_owner, auth_headers, db_session, verified_customer):
     headers = auth_headers(verified_owner)

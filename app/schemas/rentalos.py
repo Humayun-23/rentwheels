@@ -151,6 +151,20 @@ class RentalBookingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RentalDashboardSummaryResponse(BaseModel):
+    generated_at: datetime
+    active_count: int
+    active_delta: int
+    due_today_count: int
+    due_today_delta: int
+    overdue_count: int
+    overdue_delta: int
+    outstanding: int
+    outstanding_delta: int
+    today_revenue: int
+    revenue_delta: int
+
+
 class CatalogVehicleResponse(BaseModel):
     bike_id: int
     shop_id: int

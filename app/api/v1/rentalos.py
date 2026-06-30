@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
-from sqlalchemy import func
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
+from sqlalchemy import case, func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,6 +11,8 @@ from app.config import settings
 from app.db.database import get_db
 from app.db.models import (
     Bike,
+    BikeInventory,
+    Booking,
     RentalBooking,
     RentalBookingDocument,
     RentalBookingNote,
@@ -24,13 +26,17 @@ from app.db.models import (
 )
 from app.services.availability import (
     MAINTENANCE_STATUSES,
+    ONLINE_CONFLICT_STATUSES,
+    RENTALOS_CONFLICT_STATUSES,
     check_bike_availability_by_id,
+    overlap_filter,
 )
 from app.schemas.rentalos import (
     CatalogVehicleResponse,
     RentalBookingCompleteRequest,
     RentalBookingCreate,
     RentalBookingDocumentResponse,
+    RentalDashboardSummaryResponse,
     RentalBookingNoteCreate,
     RentalBookingNoteResponse,
     RentalBookingResponse,
@@ -67,6 +73,8 @@ PAYMENT_TYPES = {"advance", "balance", "security_deposit", "refund", "extra_char
 PAYMENT_STATUSES = {"pending", "partial", "paid", "refunded"}
 PAYMENT_METHODS = {"cash", "upi", "card", "bank_transfer", "other"}
 STAFF_ROLES = {"staff"}
+OPEN_BOOKING_STATUSES = {"active", "confirmed"}
+CLOSED_BOOKING_STATUSES = {"completed", "cancelled"}
 CUSTOMER_FLAG_TYPES = {
     "good_customer",
     "normal_customer",
@@ -160,16 +168,6 @@ def get_accessible_rental_customer(db: Session, customer_id: int, current_user: 
         )
     assert_rentalos_shop_access(db, customer.shop_id, current_user)
     return customer
-
-
-def is_bike_available_for_rentalos(
-    db: Session,
-    bike_id: int,
-    start_time: datetime,
-    end_time: datetime,
-) -> tuple[bool, str | None]:
-    _, _, availability = check_bike_availability_by_id(db, bike_id, start_time, end_time)
-    return availability.is_available, availability.reason
 
 
 def _validate_time_range(start_time: datetime, end_time: datetime) -> tuple[datetime, datetime]:
@@ -315,20 +313,117 @@ def _apply_payment_summary(booking: RentalBooking, payment: RentalPaymentCreate)
         booking.total_amount += payment.amount
 
 
-def _availability_status(db: Session, bike: Bike, start_time: datetime | None, end_time: datetime | None) -> str:
-    if not bike.is_available:
-        return "unavailable"
-    if bike.maintenance_status in MAINTENANCE_STATUSES:
-        return "maintenance"
+def _booking_conflict_counts_by_bike(
+    db: Session,
+    booking_model,
+    bike_ids: list[int],
+    conflict_statuses: set[str],
+    start_time: datetime | None,
+    end_time: datetime | None,
+    now: datetime,
+) -> dict[int, int]:
+    if not bike_ids:
+        return {}
 
+    query = db.query(booking_model.bike_id, func.count(booking_model.id)).filter(
+        booking_model.bike_id.in_(bike_ids),
+        booking_model.status.in_(conflict_statuses),
+    )
     if start_time and end_time:
-        available, _ = is_bike_available_for_rentalos(db, bike.id, start_time, end_time)
-        return "available" if available else "booked"
+        query = query.filter(overlap_filter(booking_model, start_time, end_time))
+    else:
+        query = query.filter(booking_model.end_time > now)
 
+    return {bike_id: count for bike_id, count in query.group_by(booking_model.bike_id).all()}
+
+
+def _catalog_availability_statuses(
+    db: Session,
+    bikes: list[Bike],
+    start_time: datetime | None,
+    end_time: datetime | None,
+) -> dict[int, str]:
+    statuses: dict[int, str] = {}
+    candidate_bikes: list[Bike] = []
+
+    for bike in bikes:
+        if not bike.is_available:
+            statuses[bike.id] = "unavailable"
+        elif bike.maintenance_status in MAINTENANCE_STATUSES:
+            statuses[bike.id] = "maintenance"
+        else:
+            candidate_bikes.append(bike)
+
+    candidate_ids = [bike.id for bike in candidate_bikes]
+    if not candidate_ids:
+        return statuses
+
+    inventory_counts = {
+        bike_id: total_quantity
+        for bike_id, total_quantity in (
+            db.query(BikeInventory.bike_id, BikeInventory.total_quantity)
+            .filter(BikeInventory.bike_id.in_(candidate_ids))
+            .all()
+        )
+    }
     now = tz.now()
-    current_window_end = now + timedelta(seconds=1)
-    available_now, _ = is_bike_available_for_rentalos(db, bike.id, now, current_window_end)
-    return "available" if available_now else "booked"
+    rentalos_conflicts = _booking_conflict_counts_by_bike(
+        db,
+        RentalBooking,
+        candidate_ids,
+        RENTALOS_CONFLICT_STATUSES,
+        start_time,
+        end_time,
+        now,
+    )
+    online_conflicts = _booking_conflict_counts_by_bike(
+        db,
+        Booking,
+        candidate_ids,
+        ONLINE_CONFLICT_STATUSES,
+        start_time,
+        end_time,
+        now,
+    )
+
+    for bike in candidate_bikes:
+        total_quantity = inventory_counts.get(bike.id, 1)
+        conflict_count = rentalos_conflicts.get(bike.id, 0) + online_conflicts.get(bike.id, 0)
+        statuses[bike.id] = "available" if total_quantity > 0 and conflict_count < total_quantity else "booked"
+
+    return statuses
+
+
+def _dashboard_day_windows(
+    as_of: datetime | None,
+    timezone_offset_minutes: int,
+) -> tuple[datetime, datetime, datetime, datetime]:
+    as_of_utc = tz.ensure_aware(as_of) if as_of else tz.now()
+    client_tz = timezone(timedelta(minutes=-timezone_offset_minutes))
+    local_now = as_of_utc.astimezone(client_tz)
+    today_start_local = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    tomorrow_start_local = today_start_local + timedelta(days=1)
+    yesterday_start_local = today_start_local - timedelta(days=1)
+
+    return (
+        as_of_utc,
+        yesterday_start_local.astimezone(timezone.utc),
+        today_start_local.astimezone(timezone.utc),
+        tomorrow_start_local.astimezone(timezone.utc),
+    )
+
+
+def _count_rental_bookings(db: Session, *filters) -> int:
+    return db.query(func.count(RentalBooking.id)).filter(*filters).scalar() or 0
+
+
+def _sum_positive_rental_booking_field(db: Session, field, *filters) -> int:
+    value = (
+        db.query(func.coalesce(func.sum(case((field > 0, field), else_=0)), 0))
+        .filter(*filters)
+        .scalar()
+    )
+    return int(value or 0)
 
 
 def _latest_customer_note(db: Session, customer_id: int, shop_id: int) -> str | None:
@@ -577,8 +672,109 @@ def update_rental_staff(
     return _staff_response(staff)
 
 
+@router.get("/dashboard/summary", response_model=RentalDashboardSummaryResponse)
+def get_dashboard_summary(
+    shop_id: int = Query(...),
+    timezone_offset_minutes: int = Query(0, ge=-14 * 60, le=14 * 60),
+    as_of: datetime | None = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return lightweight RentalOS dashboard KPI totals for one accessible shop."""
+    assert_rentalos_shop_access(db, shop_id, current_user)
+    as_of_utc, yesterday_start, today_start, tomorrow_start = _dashboard_day_windows(
+        as_of,
+        timezone_offset_minutes,
+    )
+
+    shop_filter = RentalBooking.shop_id == shop_id
+    active_filter = RentalBooking.status.in_(OPEN_BOOKING_STATUSES)
+    not_closed_filter = ~RentalBooking.status.in_(CLOSED_BOOKING_STATUSES)
+    not_cancelled_filter = RentalBooking.status != "cancelled"
+
+    active_count = _count_rental_bookings(db, shop_filter, active_filter)
+    active_yesterday = _count_rental_bookings(
+        db,
+        shop_filter,
+        active_filter,
+        RentalBooking.start_time >= yesterday_start,
+        RentalBooking.start_time < today_start,
+    )
+    due_today_count = _count_rental_bookings(
+        db,
+        shop_filter,
+        not_closed_filter,
+        RentalBooking.end_time >= today_start,
+        RentalBooking.end_time < tomorrow_start,
+    )
+    due_yesterday = _count_rental_bookings(
+        db,
+        shop_filter,
+        not_closed_filter,
+        RentalBooking.end_time >= yesterday_start,
+        RentalBooking.end_time < today_start,
+    )
+    overdue_count = _count_rental_bookings(
+        db,
+        shop_filter,
+        active_filter,
+        RentalBooking.end_time < as_of_utc,
+    )
+    overdue_before_today = _count_rental_bookings(
+        db,
+        shop_filter,
+        active_filter,
+        RentalBooking.end_time < today_start,
+    )
+    outstanding = _sum_positive_rental_booking_field(
+        db,
+        RentalBooking.balance_due,
+        shop_filter,
+        not_cancelled_filter,
+    )
+    outstanding_yesterday = _sum_positive_rental_booking_field(
+        db,
+        RentalBooking.balance_due,
+        shop_filter,
+        not_cancelled_filter,
+        RentalBooking.start_time >= yesterday_start,
+        RentalBooking.start_time < today_start,
+    )
+    today_revenue = _sum_positive_rental_booking_field(
+        db,
+        RentalBooking.advance_paid,
+        shop_filter,
+        not_cancelled_filter,
+        RentalBooking.created_at >= today_start,
+        RentalBooking.created_at < tomorrow_start,
+    )
+    yesterday_revenue = _sum_positive_rental_booking_field(
+        db,
+        RentalBooking.advance_paid,
+        shop_filter,
+        not_cancelled_filter,
+        RentalBooking.created_at >= yesterday_start,
+        RentalBooking.created_at < today_start,
+    )
+
+    return RentalDashboardSummaryResponse(
+        generated_at=as_of_utc,
+        active_count=active_count,
+        active_delta=active_count - active_yesterday,
+        due_today_count=due_today_count,
+        due_today_delta=due_today_count - due_yesterday,
+        overdue_count=overdue_count,
+        overdue_delta=overdue_count - overdue_before_today,
+        outstanding=outstanding,
+        outstanding_delta=outstanding - outstanding_yesterday,
+        today_revenue=today_revenue,
+        revenue_delta=today_revenue - yesterday_revenue,
+    )
+
+
 @router.get("/catalog/vehicles", response_model=list[CatalogVehicleResponse])
 def get_catalog_vehicles(
+    response: Response,
     shop_id: int = Query(...),
     start_time: datetime | None = None,
     end_time: datetime | None = None,
@@ -586,6 +782,7 @@ def get_catalog_vehicles(
     db: Session = Depends(get_db),
 ):
     """List RentalOS catalog vehicles for a shop."""
+    response.headers["Cache-Control"] = "public, max-age=300"
     assert_rentalos_shop_access(db, shop_id, current_user)
     if (start_time and not end_time) or (end_time and not start_time):
         raise HTTPException(
@@ -601,6 +798,7 @@ def get_catalog_vehicles(
         .filter(Bike.shop_id == shop_id)
         .all()
     )
+    availability_statuses = _catalog_availability_statuses(db, bikes, start_time, end_time)
 
     return [
         CatalogVehicleResponse(
@@ -615,7 +813,7 @@ def get_catalog_vehicles(
             maintenance_status=bike.maintenance_status,
             is_available=bike.is_available,
             image_url=_bike_image_url(bike),
-            rentalos_availability_status=_availability_status(db, bike, start_time, end_time),
+            rentalos_availability_status=availability_statuses[bike.id],
         )
         for bike in bikes
     ]
@@ -641,6 +839,22 @@ def search_customer_by_phone(
     if not customer:
         return RentalCustomerSearchResponse(found=False, phone_number=phone)
     return _customer_search_response(db, customer, phone)
+
+
+@router.get("/customers", response_model=list[RentalCustomerOut])
+def list_rental_customers(
+    shop_id: int = Query(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List RentalOS customers scoped to one accessible shop."""
+    assert_rentalos_shop_access(db, shop_id, current_user)
+    return (
+        db.query(RentalCustomer)
+        .filter(RentalCustomer.shop_id == shop_id)
+        .order_by(RentalCustomer.created_at.desc())
+        .all()
+    )
 
 
 @router.post("/customers", response_model=RentalCustomerOut, status_code=status.HTTP_201_CREATED)
@@ -814,6 +1028,7 @@ def create_rental_booking(
 def list_rental_bookings(
     shop_id: int = Query(...),
     status_filter: str | None = Query(None, alias="status"),
+    customer_id: int | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     current_user: User = Depends(get_current_user),
@@ -826,6 +1041,18 @@ def list_rental_bookings(
         .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
         .filter(RentalBooking.shop_id == shop_id)
     )
+    if customer_id is not None:
+        customer = (
+            db.query(RentalCustomer.id)
+            .filter(
+                RentalCustomer.id == customer_id,
+                RentalCustomer.shop_id == shop_id,
+            )
+            .first()
+        )
+        if not customer:
+            return []
+        query = query.filter(RentalBooking.customer_id == customer_id)
     if status_filter:
         query = query.filter(RentalBooking.status == status_filter)
     if start_date:

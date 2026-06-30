@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date
 from datetime import datetime, timedelta
@@ -89,7 +89,7 @@ def get_analytics(current_user: User = Depends(get_current_user), db: Session = 
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     
     my_shop_ids = db.query(Shop.id).filter(Shop.owner_id == current_user.id)
-    my_bike_ids = db.query(Bike.id).filter(Bike.shop_id.in_(my_shop_ids)).subquery()
+    my_bike_ids = db.query(Bike.id).filter(Bike.shop_id.in_(my_shop_ids))
 
     # 1. Revenue over time (last 30 days)
     revenue_data = db.query(
@@ -174,8 +174,9 @@ def get_my_shops(
 
 
 @router.get("/{shop_id}", response_model=ShopOut)
-def get_shop(shop_id: int, db: Session = Depends(get_db)):
+def get_shop(shop_id: int, response: Response, db: Session = Depends(get_db)):
     """Get a shop by ID"""
+    response.headers["Cache-Control"] = "public, max-age=300"
     shop = db.query(Shop).filter(Shop.id == shop_id).first()
     
     if not shop:
@@ -189,11 +190,13 @@ def get_shop(shop_id: int, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=list[ShopOut])
 def get_all_shops(
+    response: Response,
     skip: int = Query(0, ge=0, description="Number of records to skip"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
     db: Session = Depends(get_db)
 ):
     """Get all shops with pagination"""
+    response.headers["Cache-Control"] = "public, max-age=300"
     shops = db.query(Shop).offset(skip).limit(limit).all()
     return shops
 

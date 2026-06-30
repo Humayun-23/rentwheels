@@ -5,6 +5,7 @@ def test_rentalos_openapi_route_contract():
     paths = app.openapi()["paths"]
     expected_routes = {
         "/api/v1/rentalos/me": {"get"},
+        "/api/v1/rentalos/dashboard/summary": {"get"},
         "/api/v1/rentalos/staff": {"get", "post"},
         "/api/v1/rentalos/staff/{staff_id}": {"patch"},
         "/api/v1/rentalos/bookings": {"get", "post"},

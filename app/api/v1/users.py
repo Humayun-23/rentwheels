@@ -24,6 +24,7 @@ from app.schemas.email_verification import (
 from app.utils import utils
 from app.utils.limiter import limiter
 from app.utils import tz
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,7 @@ def create_user(request: Request, user: UserCreate, background_tasks: Background
             lastname=user.lastname,
             phone_number=user.phone_number,
             user_type=user.user_type,
+            is_email_verified=settings.environment == "development",
         )
 
         db.add(db_user)
@@ -99,7 +101,7 @@ def create_user(request: Request, user: UserCreate, background_tasks: Background
         smtp_password = os.getenv("SMTP_PASSWORD")
         smtp_sender = os.getenv("SMTP_SENDER", smtp_user or "noreply@gopanda.in")
 
-        if smtp_host and smtp_user and smtp_password:
+        if not db_user.is_email_verified and smtp_host and smtp_user and smtp_password:
             msg = EmailMessage()
             msg["Subject"] = "Verify your GoPanda account"
             msg["From"] = smtp_sender
