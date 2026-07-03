@@ -687,6 +687,17 @@ def get_dashboard_summary(
         timezone_offset_minutes,
     )
 
+    client_tz = timezone(timedelta(minutes=-timezone_offset_minutes))
+    local_now = as_of_utc.astimezone(client_tz)
+    this_month_start_local = local_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if this_month_start_local.month == 1:
+        prev_month_start_local = this_month_start_local.replace(year=this_month_start_local.year - 1, month=12)
+    else:
+        prev_month_start_local = this_month_start_local.replace(month=this_month_start_local.month - 1)
+        
+    this_month_start = this_month_start_local.astimezone(timezone.utc)
+    prev_month_start = prev_month_start_local.astimezone(timezone.utc)
+
     shop_filter = RentalBooking.shop_id == shop_id
     active_filter = RentalBooking.status.in_(OPEN_BOOKING_STATUSES)
     not_closed_filter = ~RentalBooking.status.in_(CLOSED_BOOKING_STATUSES)
@@ -757,6 +768,21 @@ def get_dashboard_summary(
         RentalBooking.created_at < today_start,
     )
 
+    monthly_booking_count = _count_rental_bookings(
+        db,
+        shop_filter,
+        not_cancelled_filter,
+        RentalBooking.created_at >= this_month_start,
+        RentalBooking.created_at < tomorrow_start,
+    )
+    last_month_booking_count = _count_rental_bookings(
+        db,
+        shop_filter,
+        not_cancelled_filter,
+        RentalBooking.created_at >= prev_month_start,
+        RentalBooking.created_at < this_month_start,
+    )
+
     return RentalDashboardSummaryResponse(
         generated_at=as_of_utc,
         active_count=active_count,
@@ -769,6 +795,8 @@ def get_dashboard_summary(
         outstanding_delta=outstanding - outstanding_yesterday,
         today_revenue=today_revenue,
         revenue_delta=today_revenue - yesterday_revenue,
+        monthly_booking_count=monthly_booking_count,
+        monthly_booking_delta=monthly_booking_count - last_month_booking_count,
     )
 
 

@@ -163,6 +163,8 @@ class RentalDashboardSummaryResponse(BaseModel):
     outstanding_delta: int
     today_revenue: int
     revenue_delta: int
+    monthly_booking_count: int
+    monthly_booking_delta: int
 
 
 class CatalogVehicleResponse(BaseModel):
