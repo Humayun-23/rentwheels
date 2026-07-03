@@ -33,10 +33,12 @@ class Settings(BaseSettings):
     debug: bool = False
 
     cloudinary_url: str | None = Field(default=None, validation_alias="CLOUDINARY_URL")
-    azure_storage_connection_string: str | None = Field(default=None, validation_alias="AZURE_STORAGE_CONNECTION_STRING")
-    azure_storage_rentalos_container: str | None = Field(default=None, validation_alias="AZURE_STORAGE_RENTALOS_CONTAINER")
-    azure_storage_rentalos_max_upload_mb: int = Field(default=5, validation_alias="AZURE_STORAGE_RENTALOS_MAX_UPLOAD_MB")
-    azure_storage_rentalos_public_base_url: str | None = Field(default=None, validation_alias="AZURE_STORAGE_RENTALOS_PUBLIC_BASE_URL")
+    r2_account_id: str | None = Field(default=None, validation_alias="R2_ACCOUNT_ID")
+    r2_access_key_id: str | None = Field(default=None, validation_alias="R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str | None = Field(default=None, validation_alias="R2_SECRET_ACCESS_KEY")
+    r2_bucket_name: str | None = Field(default=None, validation_alias="R2_BUCKET_NAME")
+    rentalos_max_upload_mb: int = Field(default=5, validation_alias="RENTALOS_MAX_UPLOAD_MB")
+    rentalos_r2_presigned_expire_seconds: int = Field(default=900, validation_alias="RENTALOS_R2_PRESIGNED_EXPIRE_SECONDS")
 
     @field_validator("cors_origins", mode="before")
     @classmethod

@@ -70,11 +70,13 @@ environment=development
 debug=true
 cors_origins=http://localhost:3000,http://127.0.0.1:3000
 
-# RentalOS Azure Blob Storage
-AZURE_STORAGE_CONNECTION_STRING=
-AZURE_STORAGE_RENTALOS_CONTAINER=
-AZURE_STORAGE_RENTALOS_MAX_UPLOAD_MB=5
-AZURE_STORAGE_RENTALOS_PUBLIC_BASE_URL=
+# RentalOS Cloudflare R2 Storage
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=
+RENTALOS_MAX_UPLOAD_MB=5
+RENTALOS_R2_PRESIGNED_EXPIRE_SECONDS=900
 ```
 
 ### 3. Database Setup & Run
@@ -142,7 +144,7 @@ RentalOS is separate from the online marketplace flow.
 - Owners are resolved through `Shop.owner_id == current_user.id`.
 - Staff are normal `User` rows with active `RentalStaff` membership.
 - Staff management endpoints are owner-only: `POST /rentalos/staff`, `GET /rentalos/staff?shop_id=...`, `PATCH /rentalos/staff/{staff_id}`.
-- RentalOS documents and handover photos use Azure Blob Storage, not Cloudinary.
+- RentalOS documents and handover photos use private Cloudflare R2 objects with short-lived signed URLs, not Cloudinary.
 - Marketplace bike/shop images still use Cloudinary.
 - RentalOS payments use `RentalPayment`; Razorpay marketplace payments use `Payment`.
 
@@ -191,7 +193,7 @@ When deploying to production, ensure the following steps are taken:
    - Ensure `cors_origins` is strictly limited to your frontend domain(s)
    - Use a strong, randomly generated value for `secret_key`
    - Use a managed PostgreSQL instance for reliability and backups
-   - Configure a private Azure Blob container for RentalOS document/handover uploads
-   - Add signed/authenticated RentalOS file access before exposing sensitive documents in production
+   - Configure a private Cloudflare R2 bucket for RentalOS document/handover uploads
+   - Keep RentalOS file access private and served only through backend-generated signed URLs
 2. **Reverse Proxy**: Serve the API behind a reverse proxy like Nginx or Traefik to handle SSL/TLS (HTTPS).
 3. **Process Management**: Run the application via `gunicorn` with `uvicorn` workers for optimal performance.

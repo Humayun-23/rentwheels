@@ -546,9 +546,9 @@ Detail response: one booking response object.
 
 ## File Uploads
 
-RentalOS document and handover uploads use `multipart/form-data`. Backend stores files through Azure Blob Storage and returns stored `file_url` / `image_url`.
+RentalOS document and handover uploads use `multipart/form-data`. Backend stores files as private Cloudflare R2 objects and returns short-lived signed `file_url` / `image_url` values.
 
-Do not build signed file download UI yet. The backend does not implement signed/authenticated downloads.
+Do not cache signed file URLs long-term. Refetch the booking documents or handover photos list before opening a file if the page may have been idle.
 
 ### Upload Booking Document
 
@@ -568,6 +568,8 @@ Allowed file types:
 - `image/png`
 - `image/webp`
 - `application/pdf`
+
+The backend checks both the declared MIME type and the file signature.
 
 Example:
 

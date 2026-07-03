@@ -56,10 +56,11 @@ from app.schemas.rentalos import (
     RentalStaffUpdate,
 )
 from app.utils import tz
-from app.utils.rentalos_azure_blob import (
+from app.utils.rentalos_r2 import (
     build_rentalos_blob_name,
     upload_rentalos_blob,
     validate_rentalos_upload,
+    generate_rentalos_presigned_url,
 )
 from app.utils.utils import hash_password
 
@@ -213,7 +214,7 @@ def _bike_image_url(bike: Bike) -> str | None:
 
 
 def _max_rentalos_upload_bytes() -> int:
-    return settings.azure_storage_rentalos_max_upload_mb * 1024 * 1024
+    return settings.rentalos_max_upload_mb * 1024 * 1024
 
 
 def _require_non_empty_note(note: str, message: str = "Note cannot be empty.") -> str:
@@ -1160,7 +1161,7 @@ def upload_rental_booking_document(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Upload DL/ID proof for a RentalOS booking into private Azure Blob Storage."""
+    """Upload DL/ID proof for a RentalOS booking into private Cloudflare R2 storage."""
     booking = get_accessible_rental_booking(db, booking_id, current_user)
     if document_type not in DOCUMENT_TYPES:
         raise HTTPException(
@@ -1172,8 +1173,6 @@ def upload_rental_booking_document(
     blob_name = build_rentalos_blob_name(booking.shop_id, booking.id, "documents", file.content_type)
     upload = upload_rentalos_blob(blob_name, content, file.content_type)
 
-    # TODO: Before production, serve sensitive RentalOS files through signed URL /
-    # authenticated download flow instead of exposing direct blob URLs.
     db_document = RentalBookingDocument(
         booking_id=booking.id,
         document_type=document_type,
@@ -1185,7 +1184,11 @@ def upload_rental_booking_document(
     db.add(db_document)
     db.commit()
     db.refresh(db_document)
-    return db_document
+    
+    resp = RentalBookingDocumentResponse.model_validate(db_document)
+    if resp.file_url:
+        resp.file_url = generate_rentalos_presigned_url(resp.file_url)
+    return resp
 
 
 @router.get("/bookings/{booking_id}/documents", response_model=list[RentalBookingDocumentResponse])
@@ -1196,12 +1199,19 @@ def list_rental_booking_documents(
 ):
     """List uploaded DL/ID proof metadata for an accessible RentalOS booking."""
     booking = get_accessible_rental_booking(db, booking_id, current_user)
-    return (
+    docs = (
         db.query(RentalBookingDocument)
         .filter(RentalBookingDocument.booking_id == booking.id)
         .order_by(RentalBookingDocument.created_at.desc())
         .all()
     )
+    responses = []
+    for doc in docs:
+        resp = RentalBookingDocumentResponse.model_validate(doc)
+        if resp.file_url:
+            resp.file_url = generate_rentalos_presigned_url(resp.file_url)
+        responses.append(resp)
+    return responses
 
 
 @router.post(
@@ -1221,7 +1231,7 @@ def upload_rental_handover_photo(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Upload customer-with-vehicle handover photo into private Azure Blob Storage."""
+    """Upload customer-with-vehicle handover photo into private Cloudflare R2 storage."""
     booking = get_accessible_rental_booking(db, booking_id, current_user)
     if latitude is not None and not -90 <= latitude <= 90:
         raise HTTPException(
@@ -1238,8 +1248,6 @@ def upload_rental_handover_photo(
     blob_name = build_rentalos_blob_name(booking.shop_id, booking.id, "handover", file.content_type)
     upload = upload_rentalos_blob(blob_name, content, file.content_type)
 
-    # TODO: Before production, serve sensitive RentalOS files through signed URL /
-    # authenticated download flow instead of exposing direct blob URLs.
     db_photo = RentalHandoverPhoto(
         booking_id=booking.id,
         image_url=upload.blob_url,
@@ -1254,7 +1262,11 @@ def upload_rental_handover_photo(
     db.add(db_photo)
     db.commit()
     db.refresh(db_photo)
-    return db_photo
+    
+    resp = RentalHandoverPhotoResponse.model_validate(db_photo)
+    if resp.image_url:
+        resp.image_url = generate_rentalos_presigned_url(resp.image_url)
+    return resp
 
 
 @router.get("/bookings/{booking_id}/handover-photos", response_model=list[RentalHandoverPhotoResponse])
@@ -1265,12 +1277,19 @@ def list_rental_handover_photos(
 ):
     """List handover photo metadata for an accessible RentalOS booking."""
     booking = get_accessible_rental_booking(db, booking_id, current_user)
-    return (
+    photos = (
         db.query(RentalHandoverPhoto)
         .filter(RentalHandoverPhoto.booking_id == booking.id)
         .order_by(RentalHandoverPhoto.created_at.desc())
         .all()
     )
+    responses = []
+    for photo in photos:
+        resp = RentalHandoverPhotoResponse.model_validate(photo)
+        if resp.image_url:
+            resp.image_url = generate_rentalos_presigned_url(resp.image_url)
+        responses.append(resp)
+    return responses
 
 
 @router.post("/bookings/{booking_id}/payments", response_model=RentalPaymentResponse, status_code=status.HTTP_201_CREATED)
