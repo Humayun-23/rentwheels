@@ -14,7 +14,7 @@ class BikeCreate(BaseModel):
     price_per_day: int   # Price in cents (e.g., 2500 = $25.00)
     condition: Literal["excellent", "good", "fair"] = "good"
     is_available: bool = True
-    maintenance_status: Optional[Literal["available", "maintenance", "repair", "cleaning"]] = "available"
+    maintenance_status: Optional[Literal["available", "repair", "cleaning"]] = "available"
 
 
 class Bike(BikeCreate):
@@ -35,7 +35,7 @@ class BikeUpdate(BaseModel):
     price_per_day: Optional[int] = None
     condition: Optional[Literal["excellent", "good", "fair"]] = None
     is_available: Optional[bool] = None
-    maintenance_status: Optional[Literal["available", "maintenance", "repair", "cleaning"]] = None
+    maintenance_status: Optional[Literal["available", "repair", "cleaning"]] = None
 
 class BikeImage(BaseModel):
     id: int

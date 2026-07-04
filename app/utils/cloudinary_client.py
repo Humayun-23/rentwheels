@@ -14,8 +14,19 @@ def upload_image(file: UploadFile, folder: str) -> str:
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    cloudinary.config(cloudinary_url=settings.cloudinary_url, secure=True)
-
+    url = settings.cloudinary_url
+    if url and url.startswith("cloudinary://"):
+        try:
+            url_body = url.split("cloudinary://")[1]
+            api_key_secret, cloud_name = url_body.split("@")
+            api_key, api_secret = api_key_secret.split(":")
+            cloudinary.config(cloud_name=cloud_name, api_key=api_key, api_secret=api_secret, secure=True)
+        except Exception as exc:
+            logger.error(f"Failed to parse Cloudinary URL: {exc}")
+            raise HTTPException(status_code=500, detail="Cloudinary configuration error")
+    else:
+        logger.error("Cloudinary URL is missing or invalid")
+        raise HTTPException(status_code=500, detail="Cloudinary is not configured correctly")
     try:
         result = cloudinary.uploader.upload(file.file, folder=folder, resource_type="image")
     except Exception as exc:

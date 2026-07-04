@@ -84,7 +84,7 @@ class Bike(Base):
     price_per_day = Column(Integer, nullable=False)  # Price in cents
     condition = Column(String, nullable=False, default="good")  # "excellent", "good", "fair"
     is_available = Column(Boolean, default=True)
-    maintenance_status = Column(String, default="available") # "available", "maintenance", "repair", "cleaning"
+    maintenance_status = Column(String, default="available") # "available", "repair", "cleaning"
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
 
