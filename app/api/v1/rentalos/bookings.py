@@ -162,6 +162,7 @@ def list_rental_bookings(
     customer_id: int | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
+    dashboard: bool = Query(False),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -184,12 +185,27 @@ def list_rental_bookings(
         if not customer:
             return []
         query = query.filter(RentalBooking.customer_id == customer_id)
-    if status_filter:
-        query = query.filter(RentalBooking.status == status_filter)
-    if start_date:
-        query = query.filter(RentalBooking.start_time >= tz.ensure_aware(start_date))
-    if end_date:
-        query = query.filter(RentalBooking.end_time <= tz.ensure_aware(end_date))
+        
+    if dashboard:
+        from sqlalchemy import or_
+        today_start = tz.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        query = query.join(RentalCustomer, RentalBooking.customer_id == RentalCustomer.id).filter(
+            or_(
+                RentalBooking.status.in_(["active", "confirmed"]),
+                RentalBooking.balance_due > 0,
+                RentalBooking.start_time >= today_start,
+                RentalBooking.end_time >= today_start,
+                RentalCustomer.current_flag_status.isnot(None)
+            )
+        )
+    else:
+        if status_filter:
+            query = query.filter(RentalBooking.status == status_filter)
+        if start_date:
+            query = query.filter(RentalBooking.start_time >= tz.ensure_aware(start_date))
+        if end_date:
+            query = query.filter(RentalBooking.end_time <= tz.ensure_aware(end_date))
+
     if start_date and end_date and tz.ensure_aware(start_date) > tz.ensure_aware(end_date):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
