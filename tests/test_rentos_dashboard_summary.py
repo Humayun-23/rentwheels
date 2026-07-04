@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi.testclient import TestClient
 
-from app.db.models import RentalBooking
+from app.db.models import RentalBooking, RentalPayment
 
 
 AS_OF = datetime(2026, 6, 30, 12, 0, tzinfo=timezone.utc)
@@ -154,3 +154,74 @@ def test_dashboard_summary_does_not_cross_shop_leak(
     assert data["active_count"] == 0
     assert data["outstanding"] == 0
     assert data["today_revenue"] == 0
+
+
+def test_dashboard_summary_today_collection_uses_payments_recorded_today(
+    client: TestClient,
+    db_session,
+    owner_shop,
+    owner_bike,
+    rental_customer,
+    verified_owner,
+    auth_headers,
+):
+    booking = create_summary_booking(
+        db_session,
+        shop_id=owner_shop.id,
+        customer_id=rental_customer.id,
+        bike_id=owner_bike.id,
+        start_time=datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 6, 30, 18, 0, tzinfo=timezone.utc),
+        status="active",
+        balance_due=500,
+        advance_paid=0,
+        created_at=datetime(2026, 6, 29, 8, 0, tzinfo=timezone.utc),
+    )
+    db_session.add(
+        RentalPayment(
+            booking_id=booking.id,
+            payment_type="balance",
+            amount=250,
+            status="paid",
+            method="cash",
+            paid_at=datetime(2026, 6, 30, 11, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 6, 30, 11, 0, tzinfo=timezone.utc),
+            received_by_user_id=verified_owner.id,
+        )
+    )
+    db_session.add(
+        RentalPayment(
+            booking_id=booking.id,
+            payment_type="balance",
+            amount=100,
+            status="pending",
+            method="cash",
+            paid_at=datetime(2026, 6, 30, 11, 30, tzinfo=timezone.utc),
+            created_at=datetime(2026, 6, 30, 11, 30, tzinfo=timezone.utc),
+            received_by_user_id=verified_owner.id,
+        )
+    )
+    db_session.add(
+        RentalPayment(
+            booking_id=booking.id,
+            payment_type="balance",
+            amount=80,
+            status="refunded",
+            method="cash",
+            paid_at=datetime(2026, 6, 30, 11, 45, tzinfo=timezone.utc),
+            created_at=datetime(2026, 6, 30, 11, 45, tzinfo=timezone.utc),
+            received_by_user_id=verified_owner.id,
+        )
+    )
+    db_session.commit()
+
+    response = client.get(
+        "/api/v1/rentalos/dashboard/summary",
+        params={"shop_id": owner_shop.id, "as_of": AS_OF.isoformat()},
+        headers=auth_headers(verified_owner),
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["today_revenue"] == 250
+    assert data["revenue_delta"] == 250

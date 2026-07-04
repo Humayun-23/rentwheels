@@ -238,6 +238,7 @@ class RentalCustomer(Base):
     id = Column(Integer, primary_key=True, index=True)
     shop_id = Column(Integer, ForeignKey("shops.id", ondelete="CASCADE"), nullable=False, index=True)
     phone_number = Column(String, nullable=False, index=True)
+    email = Column(String, nullable=True)
     firstname = Column(String, nullable=True)
     lastname = Column(String, nullable=True)
     document_consent = Column(Boolean, default=False)

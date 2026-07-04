@@ -1,16 +1,26 @@
 import os
 from email.message import EmailMessage
 import smtplib
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 def send_email_background(host: str, port: int, user: str, password: str, msg: EmailMessage):
     """Reusable background task for sending emails"""
     try:
-        with smtplib.SMTP(host, port) as server:
+        if port == 465:
+            server = smtplib.SMTP_SSL(host, port, timeout=15)
+        else:
+            server = smtplib.SMTP(host, port, timeout=15)
             server.starttls()
+
+        with server:
             server.login(user, password)
             server.send_message(msg)
-    except Exception as e:
-        print(f"Failed to send email: {e}")
+        logger.info("Email sent successfully", extra={"recipient": msg.get("To"), "subject": msg.get("Subject")})
+    except Exception:
+        logger.exception("Failed to send email", extra={"recipient": msg.get("To"), "subject": msg.get("Subject")})
 
 def build_receipt_email(booking, customer, bike, shop) -> EmailMessage:
     msg = EmailMessage()

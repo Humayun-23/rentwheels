@@ -289,6 +289,7 @@ Content-Type: application/json
 
 Optional fields:
 
+- `email` (used for booking and final invoice emails)
 - `firstname`
 - `lastname`
 - `phone_number`
@@ -435,6 +436,7 @@ Required fields:
 
 Optional fields:
 
+- `email`
 - `firstname`
 - `lastname`
 - `document_consent`
@@ -446,6 +448,7 @@ Request:
 {
   "shop_id": 1,
   "phone_number": "9999999999",
+  "email": "asha@example.com",
   "firstname": "Asha",
   "lastname": "Rao",
   "document_consent": true,
@@ -485,6 +488,7 @@ Request:
   "shop_id": 1,
   "bike_id": 12,
   "phone_number": "9999999999",
+  "email": "asha@example.com",
   "firstname": "Asha",
   "lastname": "Rao",
   "start_time": "2026-07-01T10:00:00Z",
@@ -516,6 +520,7 @@ Response:
   "customer": {
     "id": 7,
     "phone_number": "9999999999",
+    "email": "asha@example.com",
     "firstname": "Asha",
     "lastname": "Rao",
     "current_flag_status": null

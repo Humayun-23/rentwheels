@@ -122,7 +122,7 @@ def test_rental_booking_response_contract(
 
     assert_required_keys(
         data["customer"],
-        {"id", "phone_number", "firstname", "lastname", "current_flag_status"},
+        {"id", "phone_number", "email", "firstname", "lastname", "current_flag_status"},
     )
     assert_required_keys(
         data["bike"],

@@ -18,6 +18,7 @@ class RentalCustomerSearchResponse(BaseModel):
     found: bool
     phone_number: str
     id: Optional[int] = None
+    email: Optional[EmailStr] = None
     firstname: Optional[str] = None
     lastname: Optional[str] = None
     current_flag_status: Optional[str] = None
@@ -78,6 +79,7 @@ class RentalOSMeResponse(BaseModel):
 class RentalCustomerCreate(BaseModel):
     shop_id: int
     phone_number: str = Field(..., min_length=3, max_length=20)
+    email: Optional[EmailStr] = None
     firstname: Optional[str] = None
     lastname: Optional[str] = None
     document_consent: bool = False
@@ -88,6 +90,7 @@ class RentalCustomerOut(BaseModel):
     id: int
     shop_id: int
     phone_number: str
+    email: Optional[str] = None
     firstname: Optional[str] = None
     lastname: Optional[str] = None
     current_flag_status: Optional[str] = None
@@ -102,6 +105,7 @@ class RentalBookingCreate(BaseModel):
     shop_id: int
     bike_id: int
     phone_number: str = Field(..., min_length=3, max_length=20)
+    email: Optional[EmailStr] = None
     firstname: Optional[str] = None
     lastname: Optional[str] = None
     start_time: datetime
@@ -116,6 +120,7 @@ class RentalBookingCreate(BaseModel):
 class RentalBookingCustomerSummary(BaseModel):
     id: int
     phone_number: str
+    email: Optional[str] = None
     firstname: Optional[str] = None
     lastname: Optional[str] = None
     current_flag_status: Optional[str] = None

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     debug: bool = False
 
     cloudinary_url: str | None = Field(default=None, validation_alias="CLOUDINARY_URL")
+    smtp_host: str | None = Field(default=None, validation_alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, validation_alias="SMTP_PORT")
+    smtp_user: str | None = Field(default=None, validation_alias="SMTP_USER")
+    smtp_password: str | None = Field(default=None, validation_alias="SMTP_PASSWORD")
+    smtp_sender: str | None = Field(default=None, validation_alias="SMTP_SENDER")
     r2_account_id: str | None = Field(default=None, validation_alias="R2_ACCOUNT_ID")
     r2_access_key_id: str | None = Field(default=None, validation_alias="R2_ACCESS_KEY_ID")
     r2_secret_access_key: str | None = Field(default=None, validation_alias="R2_SECRET_ACCESS_KEY")
