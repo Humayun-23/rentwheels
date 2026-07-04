@@ -1,10 +1,24 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
+from datetime import datetime
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import RentalBookingDocument, RentalHandoverPhoto, User
+from app.schemas.rentalos import RentalBookingDocumentResponse, RentalHandoverPhotoResponse
+from app.utils.rentalos_r2 import (
+    build_rentalos_blob_name,
+    upload_rentalos_blob,
+    validate_rentalos_upload,
+    generate_rentalos_presigned_url,
+)
+from .utils import (
+    get_accessible_rental_booking,
+    DOCUMENT_TYPES,
+    DOCUMENT_CONTENT_TYPES,
+    HANDOVER_PHOTO_CONTENT_TYPES,
+    _max_rentalos_upload_bytes,
+)
+
 
 router = APIRouter()
 

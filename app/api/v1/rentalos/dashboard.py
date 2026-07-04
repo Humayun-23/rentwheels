@@ -1,10 +1,20 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
+from datetime import datetime, timezone, timedelta
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import RentalBooking, RentalPayment, User
+from app.schemas.rentalos import RentalDashboardSummaryResponse
+from .utils import (
+    assert_rentalos_shop_access,
+    OPEN_BOOKING_STATUSES,
+    CLOSED_BOOKING_STATUSES,
+    _dashboard_day_windows,
+    _count_rental_bookings,
+    _sum_positive_rental_booking_field,
+    _sum_rental_collection_for_window,
+)
+
 
 router = APIRouter()
 

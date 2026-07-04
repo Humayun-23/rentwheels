@@ -1,10 +1,17 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
-from sqlalchemy.orm import Session
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy.orm import Session, joinedload
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import Bike, User
+from app.schemas.rentalos import CatalogVehicleResponse
+from .utils import (
+    assert_rentalos_shop_access,
+    _validate_time_range,
+    _catalog_availability_statuses,
+    _bike_image_url,
+)
+
 
 router = APIRouter()
 

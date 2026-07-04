@@ -1,10 +1,14 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import RentalBookingNote, User
+from app.schemas.rentalos import RentalBookingNoteCreate, RentalBookingNoteResponse
+from .utils import (
+    get_accessible_rental_booking,
+    _require_non_empty_note,
+)
+
 
 router = APIRouter()
 

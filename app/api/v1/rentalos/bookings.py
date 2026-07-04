@@ -1,10 +1,27 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
-from sqlalchemy.orm import Session
+from datetime import datetime
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import RentalBooking, RentalBookingNote, RentalCustomer, RentalCustomerFlag, RentalPayment, User
+from app.schemas.rentalos import (
+    RentalBookingCompleteRequest,
+    RentalBookingCreate,
+    RentalBookingResponse,
+)
+from app.services.availability import check_bike_availability_by_id
+from app.services.rentalos_invoice_email import enqueue_rentalos_invoice_email
+from .utils import (
+    assert_rentalos_shop_access,
+    get_accessible_rental_booking,
+    tz,
+    _validate_time_range,
+    _normalize_optional_email,
+    _validate_customer_flag,
+    _create_customer_flag,
+)
+
 
 router = APIRouter()
 

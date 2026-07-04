@@ -1,10 +1,27 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import RentalStaff, Shop, User
+from app.schemas.rentalos import (
+    RentalOSAccessShop,
+    RentalOSMeResponse,
+    RentalStaffCreate,
+    RentalStaffResponse,
+    RentalStaffUpdate,
+)
+from app.utils.utils import hash_password
+from .utils import (
+    assert_rentalos_owner_access,
+    assert_rentalos_shop_access,
+    tz,
+    func,
+    _validate_staff_role,
+    _staff_response,
+)
+
 
 router = APIRouter()
 

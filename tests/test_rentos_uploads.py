@@ -10,8 +10,8 @@ from app.utils.rentalos_r2 import RentalOSBlobUpload
 JPEG_BYTES = b"\xff\xd8\xff\xe0fake image content"
 
 
-@patch("app.api.v1.rentalos.generate_rentalos_presigned_url")
-@patch("app.api.v1.rentalos.upload_rentalos_blob")
+@patch("app.api.v1.rentalos.documents.generate_rentalos_presigned_url")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
 def test_upload_booking_document(mock_upload, mock_generate_url, client: TestClient, owner_shop, rental_booking, verified_owner, auth_headers):
     mock_generate_url.return_value = "https://mock.blob.core.windows.net/documents/mock_url.jpg"
     mock_upload.return_value = RentalOSBlobUpload(
@@ -34,7 +34,7 @@ def test_upload_booking_document(mock_upload, mock_generate_url, client: TestCli
     assert data["file_url"] == "https://mock.blob.core.windows.net/documents/mock_url.jpg"
     assert data["content_type"] == "image/jpeg"
 
-@patch("app.api.v1.rentalos.upload_rentalos_blob")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
 def test_upload_booking_document_invalid_type(mock_upload, client: TestClient, rental_booking, verified_owner, auth_headers):
     headers = auth_headers(verified_owner)
     
@@ -50,7 +50,7 @@ def test_upload_booking_document_invalid_type(mock_upload, client: TestClient, r
     assert "unsupported file type" in response.json()["detail"].lower()
 
 
-@patch("app.api.v1.rentalos.upload_rentalos_blob")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
 def test_upload_booking_document_rejects_mime_spoof(mock_upload, client: TestClient, rental_booking, verified_owner, auth_headers):
     headers = auth_headers(verified_owner)
 
@@ -66,7 +66,7 @@ def test_upload_booking_document_rejects_mime_spoof(mock_upload, client: TestCli
     mock_upload.assert_not_called()
 
 
-@patch("app.api.v1.rentalos.upload_rentalos_blob")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
 def test_upload_handover_photo_rejects_pdf(mock_upload, client: TestClient, rental_booking, verified_owner, auth_headers):
     headers = auth_headers(verified_owner)
     
@@ -81,7 +81,7 @@ def test_upload_handover_photo_rejects_pdf(mock_upload, client: TestClient, rent
     assert response.status_code == 400
     assert "unsupported file type" in response.json()["detail"].lower()
 
-@patch("app.api.v1.rentalos.upload_rentalos_blob")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
 def test_upload_handover_photo_invalid_location(mock_upload, client: TestClient, rental_booking, verified_owner, auth_headers):
     headers = auth_headers(verified_owner)
     

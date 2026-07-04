@@ -1,10 +1,27 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import *
-from app.schemas.rentalos import *
-from .utils import *
+from app.db.models import RentalCustomer, RentalCustomerFlag, User
+from app.schemas.rentalos import (
+    RentalCustomerCreate,
+    RentalCustomerFlagCreate,
+    RentalCustomerFlagResponse,
+    RentalCustomerOut,
+    RentalCustomerSearchResponse,
+)
+from .utils import (
+    assert_rentalos_shop_access,
+    get_accessible_rental_customer,
+    tz,
+    _normalize_optional_email,
+    _require_non_empty_note,
+    _validate_customer_flag,
+    _create_customer_flag,
+    _customer_search_response,
+)
+
 
 router = APIRouter()
 
