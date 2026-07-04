@@ -50,6 +50,7 @@ def get_rentalos_me(
             role="owner",
             staff_id=None,
             is_active=True,
+            subscription_status=shop.rentalos_subscription_status,
         )
         for shop in owned_shops
     ]
@@ -60,6 +61,7 @@ def get_rentalos_me(
             role=staff.role,
             staff_id=staff.id,
             is_active=staff.is_active,
+            subscription_status=staff.shop.rentalos_subscription_status,
         )
         for staff in active_staff_memberships
         if staff.shop_id not in owned_shop_ids

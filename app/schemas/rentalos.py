@@ -65,6 +65,7 @@ class RentalOSAccessShop(BaseModel):
     role: str
     staff_id: Optional[int] = None
     is_active: bool = True
+    subscription_status: str
 
 
 class RentalOSMeResponse(BaseModel):

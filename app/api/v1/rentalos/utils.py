@@ -116,6 +116,12 @@ def get_rentalos_shop_access(db: Session, shop_id: int, current_user: User) -> t
             detail=f"Shop with ID {shop_id} not found",
         )
 
+    if shop.rentalos_subscription_status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="rentalos_subscription_required",
+        )
+
     if shop.owner_id == current_user.id:
         return shop, None
 
@@ -140,6 +146,13 @@ def assert_rentalos_owner_access(db: Session, shop_id: int, current_user: User) 
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Shop with ID {shop_id} not found",
         )
+    
+    if shop.rentalos_subscription_status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail="rentalos_subscription_required",
+        )
+
     if shop.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

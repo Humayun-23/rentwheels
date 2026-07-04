@@ -112,6 +112,7 @@ def owner_shop(db_session, verified_owner):
         phone_number="1111111111",
         address="123 Main St",
         city="City",
+        rentalos_subscription_status="active",
     )
     db_session.add(shop)
     db_session.commit()
@@ -126,6 +127,7 @@ def other_shop(db_session, other_owner):
         phone_number="2222222222",
         address="456 Other St",
         city="Other City",
+        rentalos_subscription_status="active",
     )
     db_session.add(shop)
     db_session.commit()
