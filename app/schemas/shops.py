@@ -8,6 +8,7 @@ class ShopCreate(BaseModel):
     description: Optional[str] = None
     phone_number: str = Field(..., min_length=10, max_length=20)
     address: str
+    location_map_link: Optional[str] = None
     city: str
     state: Optional[str] = None
     zip_code: Optional[str] = None
@@ -32,6 +33,7 @@ class ShopUpdate(BaseModel):
     description: Optional[str] = None
     phone_number: Optional[str] = Field(None, min_length=10, max_length=20)
     address: Optional[str] = None
+    location_map_link: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
