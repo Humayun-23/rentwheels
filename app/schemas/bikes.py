@@ -7,7 +7,7 @@ class BikeCreate(BaseModel):
     shop_id: int  # Required: which shop owns this bike
     name: str
     model: str
-    bike_type: Literal["scooty", "bike", "car", "mountain", "road", "hybrid", "electric"]
+    bike_type: Literal["scooty", "bike", "car", "hybrid", "electric"]
     engine_cc: Optional[int] = None  # Engine displacement in CC
     description: Optional[str] = None
     price_per_hour: int  # Price in cents (e.g., 500 = $5.00)
@@ -28,7 +28,7 @@ class Bike(BikeCreate):
 class BikeUpdate(BaseModel):
     name: Optional[str] = None
     model: Optional[str] = None
-    bike_type: Optional[Literal["scooty", "bike", "car", "mountain", "road", "hybrid", "electric"]] = None
+    bike_type: Optional[Literal["scooty", "bike", "car", "hybrid", "electric"]] = None
     engine_cc: Optional[int] = None  # Engine displacement in CC
     description: Optional[str] = None
     price_per_hour: Optional[int] = None
