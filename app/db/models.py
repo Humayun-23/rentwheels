@@ -37,6 +37,7 @@ class Shop(Base):
     phone_number = Column(String, nullable=False)  # Changed to String to support all phone formats
     upi_id = Column(String(50), nullable=True)
     address = Column(String, nullable=False)
+    location_map_link = Column(String, nullable=True)
     city = Column(String, nullable=False)
     state = Column(String, nullable=True)
     zip_code = Column(String, nullable=True)
