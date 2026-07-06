@@ -37,7 +37,12 @@ app.add_middleware(LoggingMiddleware)
 # Add trusted host middleware for Azure (set X-Forwarded-Proto, etc.)
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=["*"],  # Allow all hosts since we're behind Azure's load balancer
+    allowed_hosts=[
+        "gopanda-backend.gentlepond-2aacc834.centralindia.azurecontainerapps.io",
+        "localhost",
+        "127.0.0.1",
+        "testserver",
+    ],
 )
 
 # Set limiter on app state and register exception handler

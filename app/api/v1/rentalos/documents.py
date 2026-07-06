@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status, Response
 from sqlalchemy.orm import Session
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
@@ -67,10 +67,12 @@ def upload_rental_booking_document(
 @router.get("/bookings/{booking_id}/documents", response_model=list[RentalBookingDocumentResponse])
 def list_rental_booking_documents(
     booking_id: int,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List uploaded DL/ID proof metadata for an accessible RentalOS booking."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     booking = get_accessible_rental_booking(db, booking_id, current_user)
     docs = (
         db.query(RentalBookingDocument)
@@ -145,10 +147,12 @@ def upload_rental_handover_photo(
 @router.get("/bookings/{booking_id}/handover-photos", response_model=list[RentalHandoverPhotoResponse])
 def list_rental_handover_photos(
     booking_id: int,
+    response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List handover photo metadata for an accessible RentalOS booking."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     booking = get_accessible_rental_booking(db, booking_id, current_user)
     photos = (
         db.query(RentalHandoverPhoto)
