@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int
 
     cors_origins: str = ""  # ← read as raw string, validator converts to list
+    trusted_hosts: str = Field(default="localhost,127.0.0.1", validation_alias="TRUSTED_HOSTS")
 
     environment: str = "production"
     debug: bool = False
@@ -75,6 +76,11 @@ class Settings(BaseSettings):
         except json.JSONDecodeError:
             pass
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    def get_trusted_hosts(self) -> list[str]:
+        if not self.trusted_hosts or self.trusted_hosts.strip() == "*":
+            return ["*"]
+        return [h.strip() for h in self.trusted_hosts.split(",") if h.strip()]
 
 
 settings = Settings()
