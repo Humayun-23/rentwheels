@@ -44,7 +44,7 @@ class Shop(Base):
     opening_time = Column(Time, nullable=True)
     closing_time = Column(Time, nullable=True)
     is_active = Column(Boolean, default=True)
-    rentalos_subscription_status = Column(String, default="inactive")
+    rentalos_subscription_status = Column(String, default="active")
     rentalos_subscription_end_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=tz.now)
     updated_at = Column(DateTime, default=tz.now, onupdate=tz.now)
