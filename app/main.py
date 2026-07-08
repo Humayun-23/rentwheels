@@ -35,9 +35,13 @@ app = FastAPI(
 app.add_middleware(LoggingMiddleware)
 
 # Add trusted host middleware for Azure (set X-Forwarded-Proto, etc.)
+trusted_hosts = settings.get_trusted_hosts()
+if "testserver" not in trusted_hosts and "*" not in trusted_hosts:
+    trusted_hosts.append("testserver")
+
 app.add_middleware(
     TrustedHostMiddleware,
-    allowed_hosts=settings.get_trusted_hosts(),
+    allowed_hosts=trusted_hosts,
 )
 
 # Set limiter on app state and register exception handler
