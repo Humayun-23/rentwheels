@@ -106,8 +106,10 @@ def test_cannot_cancel_completed_booking(client: TestClient, rental_booking, ver
     assert "completed" in cancel_response.json()["detail"].lower()
 
 
-def test_payment_on_completed_booking(client: TestClient, rental_booking, verified_owner, auth_headers):
+def test_payment_on_completed_booking(client: TestClient, rental_booking, verified_owner, auth_headers, db_session):
     headers = auth_headers(verified_owner)
+    rental_booking.balance_due = 500
+    db_session.commit()
     
     # Complete the trip
     client.post(
@@ -123,9 +125,17 @@ def test_payment_on_completed_booking(client: TestClient, rental_booking, verifi
         json={
             "payment_type": "balance",
             "amount": 200,
-            "status": "paid"
+            "status": "paid",
+            "method": "upi",
         }
     )
-    # The API might allow post-trip payments (e.g. for damage), or it might reject them.
-    # We just ensure it doesn't crash. If it rejects, we test for 400. Let's assume it accepts.
-    assert pay_response.status_code in (200, 400)
+    assert pay_response.status_code == 201
+    data = pay_response.json()
+    assert data["payment_type"] == "balance"
+    assert data["amount"] == 200
+    assert data["method"] == "upi"
+
+    booking_response = client.get(f"/api/v1/rentalos/bookings/{rental_booking.id}", headers=headers)
+    assert booking_response.status_code == 200
+    assert booking_response.json()["status"] == "completed"
+    assert booking_response.json()["balance_due"] == 300

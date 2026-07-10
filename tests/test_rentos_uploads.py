@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch
 from fastapi import HTTPException
 
+from app.db.models import RentalBookingDocument
 from app.utils import rentalos_r2
 from app.utils.rentalos_r2 import RentalOSBlobUpload
 
@@ -12,7 +13,16 @@ JPEG_BYTES = b"\xff\xd8\xff\xe0fake image content"
 
 @patch("app.api.v1.rentalos.documents.generate_rentalos_presigned_url")
 @patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
-def test_upload_booking_document(mock_upload, mock_generate_url, client: TestClient, owner_shop, rental_booking, verified_owner, auth_headers):
+def test_upload_booking_document(
+    mock_upload,
+    mock_generate_url,
+    client: TestClient,
+    db_session,
+    owner_shop,
+    rental_booking,
+    verified_owner,
+    auth_headers,
+):
     mock_generate_url.return_value = "https://mock.blob.core.windows.net/documents/mock_url.jpg"
     mock_upload.return_value = RentalOSBlobUpload(
         blob_name="mock_name", 
@@ -33,6 +43,17 @@ def test_upload_booking_document(mock_upload, mock_generate_url, client: TestCli
     assert data["document_type"] == "driving_license"
     assert data["file_url"] == "https://mock.blob.core.windows.net/documents/mock_url.jpg"
     assert data["content_type"] == "image/jpeg"
+
+    db_document = (
+        db_session.query(RentalBookingDocument)
+        .filter(RentalBookingDocument.booking_id == rental_booking.id)
+        .one()
+    )
+    assert db_document.document_type == "driving_license"
+    assert db_document.file_url == "https://mock.blob.core.windows.net/documents/mock_url.jpg"
+    assert db_document.file_name == "test.jpg"
+    assert db_document.content_type == "image/jpeg"
+    assert db_document.uploaded_by_user_id == verified_owner.id
 
 @patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
 def test_upload_booking_document_invalid_type(mock_upload, client: TestClient, rental_booking, verified_owner, auth_headers):

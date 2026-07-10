@@ -30,11 +30,6 @@ def record_rental_payment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot record payment for a cancelled booking.",
         )
-    if booking.status == "completed":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot record payment for a completed booking.",
-        )
 
     db_payment = RentalPayment(
         booking_id=booking.id,
@@ -67,5 +62,4 @@ def list_rental_payments(
         .order_by(RentalPayment.created_at.desc())
         .all()
     )
-
 
