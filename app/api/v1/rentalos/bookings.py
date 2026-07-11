@@ -1,21 +1,26 @@
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from sqlalchemy import asc, desc
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import RentalBooking, RentalBookingNote, RentalCustomer, RentalCustomerFlag, RentalPayment, User
+from app.db.models import Bike, RentalBooking, RentalBookingNote, RentalCustomer, RentalCustomerFlag, RentalPayment, User
 from app.schemas.rentalos import (
     RentalBookingCompleteRequest,
     RentalBookingCreate,
+    RentalBookingPaginatedResponse,
     RentalBookingResponse,
 )
 from app.services.availability import check_bike_availability_by_id
 from app.services.rentalos_invoice_email import enqueue_rentalos_invoice_email
 from .utils import (
     assert_rentalos_shop_access,
+    CLOSED_BOOKING_STATUSES,
+    OPEN_BOOKING_STATUSES,
     get_accessible_rental_booking,
     tz,
+    _dashboard_day_windows,
     _validate_time_range,
     _normalize_optional_email,
     _validate_customer_flag,
@@ -155,20 +160,29 @@ def create_rental_booking(
     return created_booking
 
 
-@router.get("/bookings", response_model=list[RentalBookingResponse])
+@router.get("/bookings", response_model=RentalBookingPaginatedResponse)
 def list_rental_bookings(
     shop_id: int = Query(...),
     status_filter: str | None = Query(None, alias="status"),
+    tab: str = Query("all", pattern="^(all|active|due_today|overdue|completed)$"),
     customer_id: int | None = None,
     start_date: datetime | None = None,
     end_date: datetime | None = None,
     dashboard: bool = Query(False),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    sort_by: str = Query("end_time", pattern="^(end_time|customer|vehicle|balance_due)$"),
+    sort_dir: str = Query("desc", pattern="^(asc|desc)$"),
+    timezone_offset_minutes: int = Query(0, ge=-14 * 60, le=14 * 60),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """List RentalOS bookings scoped to one accessible shop."""
     assert_rentalos_shop_access(db, shop_id, current_user)
-    query = (
+    _, _, today_start, tomorrow_start = _dashboard_day_windows(None, timezone_offset_minutes)
+    now = tz.now()
+
+    base_query = (
         db.query(RentalBooking)
         .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
         .filter(RentalBooking.shop_id == shop_id)
@@ -183,13 +197,13 @@ def list_rental_bookings(
             .first()
         )
         if not customer:
-            return []
-        query = query.filter(RentalBooking.customer_id == customer_id)
-        
+            return {"items": [], "total": 0, "counts": {"all": 0, "active": 0, "due_today": 0, "overdue": 0, "completed": 0}}
+        base_query = base_query.filter(RentalBooking.customer_id == customer_id)
+
     if dashboard:
         from sqlalchemy import or_
         today_start = tz.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        query = query.join(RentalCustomer, RentalBooking.customer_id == RentalCustomer.id).filter(
+        base_query = base_query.join(RentalCustomer, RentalBooking.customer_id == RentalCustomer.id).filter(
             or_(
                 RentalBooking.status.in_(["active", "confirmed"]),
                 RentalBooking.balance_due > 0,
@@ -199,12 +213,10 @@ def list_rental_bookings(
             )
         )
     else:
-        if status_filter:
-            query = query.filter(RentalBooking.status == status_filter)
         if start_date:
-            query = query.filter(RentalBooking.start_time >= tz.ensure_aware(start_date))
+            base_query = base_query.filter(RentalBooking.start_time >= tz.ensure_aware(start_date))
         if end_date:
-            query = query.filter(RentalBooking.end_time <= tz.ensure_aware(end_date))
+            base_query = base_query.filter(RentalBooking.end_time <= tz.ensure_aware(end_date))
 
     if start_date and end_date and tz.ensure_aware(start_date) > tz.ensure_aware(end_date):
         raise HTTPException(
@@ -212,7 +224,54 @@ def list_rental_bookings(
             detail="start_date must be before end_date.",
         )
 
-    return query.order_by(RentalBooking.start_time.desc()).all()
+    def apply_tab_filter(query, tab_key: str):
+        if tab_key == "active":
+            return query.filter(RentalBooking.status.in_(OPEN_BOOKING_STATUSES))
+        if tab_key == "due_today":
+            return query.filter(
+                ~RentalBooking.status.in_(CLOSED_BOOKING_STATUSES),
+                RentalBooking.end_time >= today_start,
+                RentalBooking.end_time < tomorrow_start,
+            )
+        if tab_key == "overdue":
+            return query.filter(
+                RentalBooking.status.in_(OPEN_BOOKING_STATUSES),
+                RentalBooking.end_time < now,
+            )
+        if tab_key == "completed":
+            return query.filter(RentalBooking.status == "completed")
+        return query
+
+    count_base = base_query
+    counts = {
+        "all": count_base.order_by(None).count(),
+        "active": apply_tab_filter(count_base, "active").order_by(None).count(),
+        "due_today": apply_tab_filter(count_base, "due_today").order_by(None).count(),
+        "overdue": apply_tab_filter(count_base, "overdue").order_by(None).count(),
+        "completed": apply_tab_filter(count_base, "completed").order_by(None).count(),
+    }
+
+    query = base_query
+    if status_filter:
+        query = query.filter(RentalBooking.status == status_filter)
+    elif not dashboard:
+        query = apply_tab_filter(query, tab)
+
+    if sort_by == "customer":
+        query = query.join(RentalCustomer, RentalBooking.customer_id == RentalCustomer.id)
+        sort_column = RentalCustomer.firstname
+    elif sort_by == "vehicle":
+        query = query.join(Bike, RentalBooking.bike_id == Bike.id)
+        sort_column = Bike.name
+    elif sort_by == "balance_due":
+        sort_column = RentalBooking.balance_due
+    else:
+        sort_column = RentalBooking.end_time
+    direction = asc if sort_dir == "asc" else desc
+
+    total = query.count()
+    items = query.order_by(direction(sort_column), RentalBooking.id.desc()).offset(skip).limit(limit).all()
+    return {"items": items, "total": total, "counts": counts}
 
 
 @router.get("/bookings/{booking_id}", response_model=RentalBookingResponse)
@@ -360,5 +419,3 @@ def complete_rental_booking(
     )
     enqueue_rentalos_invoice_email(background_tasks, completed_booking, payments, "final")
     return completed_booking
-
-

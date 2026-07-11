@@ -118,6 +118,47 @@ def test_dashboard_summary_returns_kpis_without_loading_full_bookings(
     assert data["outstanding_delta"] == 550
     assert data["today_revenue"] == 150
     assert data["revenue_delta"] == 120
+    assert "active_trips_due_today" not in data
+    assert "timeline_events" not in data
+    assert "flagged_bookings" not in data
+    assert "unpaid_bookings" not in data
+
+
+def test_dashboard_details_returns_heavy_dashboard_lists(
+    client: TestClient,
+    db_session,
+    owner_shop,
+    owner_bike,
+    rental_customer,
+    verified_owner,
+    auth_headers,
+):
+    headers = auth_headers(verified_owner)
+
+    due_today = create_summary_booking(
+        db_session,
+        shop_id=owner_shop.id,
+        customer_id=rental_customer.id,
+        bike_id=owner_bike.id,
+        start_time=datetime(2026, 6, 30, 9, 0, tzinfo=timezone.utc),
+        end_time=datetime(2026, 6, 30, 18, 0, tzinfo=timezone.utc),
+        status="active",
+        balance_due=400,
+        advance_paid=100,
+        created_at=datetime(2026, 6, 30, 10, 0, tzinfo=timezone.utc),
+    )
+
+    response = client.get(
+        "/api/v1/rentalos/dashboard/details",
+        params={"shop_id": owner_shop.id, "as_of": AS_OF.isoformat()},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [booking["id"] for booking in data["active_trips_due_today"]] == [due_today.id]
+    assert {event["type"] for event in data["timeline_events"]} == {"pickup", "return"}
+    assert data["unpaid_bookings"][0]["id"] == due_today.id
 
 
 def test_dashboard_summary_does_not_cross_shop_leak(

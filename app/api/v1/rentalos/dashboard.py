@@ -1,10 +1,11 @@
 from datetime import datetime, timezone, timedelta
-from fastapi import APIRouter, Depends, Query, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.orm import Session, joinedload
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import RentalBooking, RentalPayment, User
-from app.schemas.rentalos import RentalDashboardSummaryResponse
+from app.db.models import RentalBooking, RentalPayment, User, RentalCustomer
+from app.schemas.rentalos import RentalDashboardDetailsResponse, RentalDashboardSummaryResponse
+from app.utils import tz
 from .utils import (
     assert_rentalos_shop_access,
     OPEN_BOOKING_STATUSES,
@@ -40,7 +41,7 @@ def get_dashboard_summary(
         prev_month_start_local = this_month_start_local.replace(year=this_month_start_local.year - 1, month=12)
     else:
         prev_month_start_local = this_month_start_local.replace(month=this_month_start_local.month - 1)
-        
+
     this_month_start = this_month_start_local.astimezone(timezone.utc)
     prev_month_start = prev_month_start_local.astimezone(timezone.utc)
 
@@ -132,3 +133,89 @@ def get_dashboard_summary(
     )
 
 
+@router.get("/dashboard/details", response_model=RentalDashboardDetailsResponse)
+def get_dashboard_details(
+    shop_id: int = Query(...),
+    timezone_offset_minutes: int = Query(0, ge=-14 * 60, le=14 * 60),
+    as_of: datetime | None = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return heavier RentalOS dashboard section lists for one accessible shop."""
+    assert_rentalos_shop_access(db, shop_id, current_user)
+    as_of_utc, _, today_start, tomorrow_start = _dashboard_day_windows(
+        as_of,
+        timezone_offset_minutes,
+    )
+
+    shop_filter = RentalBooking.shop_id == shop_id
+    active_filter = RentalBooking.status.in_(OPEN_BOOKING_STATUSES)
+    not_closed_filter = ~RentalBooking.status.in_(CLOSED_BOOKING_STATUSES)
+    not_cancelled_filter = RentalBooking.status != "cancelled"
+
+    active_trips_due_today = (
+        db.query(RentalBooking)
+        .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
+        .filter(shop_filter, active_filter, RentalBooking.end_time < tomorrow_start)
+        .all()
+    )
+
+    all_active_or_confirmed = (
+        db.query(RentalBooking)
+        .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
+        .filter(shop_filter, RentalBooking.status.in_(["active", "confirmed"]))
+        .all()
+    )
+
+    timeline_events = []
+    for booking in all_active_or_confirmed:
+        pickup_time = tz.ensure_aware(booking.start_time) if booking.start_time else None
+        drop_time = tz.ensure_aware(booking.end_time) if booking.end_time else None
+
+        # Check if pickup is today
+        if pickup_time and pickup_time >= today_start and pickup_time < tomorrow_start:
+            timeline_events.append({
+                "id": f"{booking.id}-pickup",
+                "booking": booking,
+                "type": "pickup",
+                "time": pickup_time,
+                "overdue": False
+            })
+
+        # Check if dropoff is today or earlier (overdue)
+        # Note: If it's overdue, the dashboard wants it in the timeline too
+        if drop_time and drop_time < tomorrow_start:
+            is_overdue = drop_time < as_of_utc
+            if drop_time >= today_start or is_overdue:
+                timeline_events.append({
+                    "id": f"{booking.id}-return",
+                    "booking": booking,
+                    "type": "return",
+                    "time": drop_time,
+                    "overdue": is_overdue
+                })
+
+    # Sort timeline: overdue first, then by time
+    timeline_events.sort(key=lambda x: (not x["overdue"], x["time"]))
+
+    flagged_bookings = (
+        db.query(RentalBooking)
+        .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
+        .join(RentalCustomer, RentalBooking.customer_id == RentalCustomer.id)
+        .filter(shop_filter, not_closed_filter, RentalCustomer.current_flag_status.isnot(None))
+        .all()
+    )
+
+    unpaid_bookings = (
+        db.query(RentalBooking)
+        .options(joinedload(RentalBooking.customer), joinedload(RentalBooking.bike))
+        .filter(shop_filter, not_cancelled_filter, RentalBooking.balance_due > 0)
+        .all()
+    )
+
+    return RentalDashboardDetailsResponse(
+        active_trips_due_today=active_trips_due_today,
+        timeline_events=timeline_events,
+        flagged_bookings=flagged_bookings,
+        unpaid_bookings=unpaid_bookings,
+    )

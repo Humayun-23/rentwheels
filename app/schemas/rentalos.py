@@ -157,6 +157,20 @@ class RentalBookingResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RentalBookingPaginatedResponse(BaseModel):
+    items: list[RentalBookingResponse]
+    total: int
+    counts: dict[str, int] = Field(default_factory=dict)
+
+
+class TimelineEventSchema(BaseModel):
+    id: str
+    booking: RentalBookingResponse
+    type: str  # "pickup" or "return"
+    time: datetime
+    overdue: bool
+
+
 class RentalDashboardSummaryResponse(BaseModel):
     generated_at: datetime
     active_count: int
@@ -171,6 +185,13 @@ class RentalDashboardSummaryResponse(BaseModel):
     revenue_delta: int
     monthly_booking_count: int
     monthly_booking_delta: int
+
+
+class RentalDashboardDetailsResponse(BaseModel):
+    active_trips_due_today: list[RentalBookingResponse] = Field(default_factory=list)
+    timeline_events: list[TimelineEventSchema] = Field(default_factory=list)
+    flagged_bookings: list[RentalBookingResponse] = Field(default_factory=list)
+    unpaid_bookings: list[RentalBookingResponse] = Field(default_factory=list)
 
 
 class CatalogVehicleResponse(BaseModel):
