@@ -3,14 +3,14 @@ fastapi==0.110.0
 uvicorn[standard]==0.29.0
 
 ## Data validation & settings
-pydantic==2.6.4
-pydantic-settings==2.2.1
+pydantic>=2.9.0
+pydantic-settings>=2.4.0
 python-dotenv==1.0.1
 
 ## Database & migrations (SQLAlchemy + Postgres)
-SQLAlchemy==2.0.29
+SQLAlchemy>=2.0.35
 alembic==1.13.1
-psycopg2-binary==2.9.9
+psycopg2-binary>=2.9.9
 
 ## Auth & security
 PyJWT==2.10.1

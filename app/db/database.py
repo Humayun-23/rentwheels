@@ -8,7 +8,14 @@ from app.config import settings
 # Set DATABASE_URL environment variable or it will use default
 # Example: postgresql://username:password@localhost:5432/rentwheels
 # Add sslmode=require for cloud databases like Neon
-DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}?sslmode=require"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+    if "sslmode=require" not in DATABASE_URL and "localhost" not in DATABASE_URL:
+        DATABASE_URL += "?sslmode=require" if "?" not in DATABASE_URL else "&sslmode=require"
+else:
+    DATABASE_URL = f"postgresql://{settings.database_username}:{settings.database_password}@{settings.database_hostname}:{settings.database_port}/{settings.database_name}?sslmode=require"
 
 engine = create_engine(
     DATABASE_URL,
