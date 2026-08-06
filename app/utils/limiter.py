@@ -1,10 +1,5 @@
-"""
-Rate limiter instance for the application.
-Import this module to access the limiter, avoiding circular imports.
-"""
+import os
 from slowapi import Limiter
-
-# Initialize rate limiter
 
 def get_client_ip(request):
     if request.client is None:
@@ -12,6 +7,8 @@ def get_client_ip(request):
     return request.client.host
 
 def get_limiter():
-    return Limiter(key_func=get_client_ip, config_filename=None)
+    # Clean workaround: Use /dev/null if .env doesn't exist to prevent crashes
+    config_file = ".env" if os.path.exists(".env") else os.devnull
+    return Limiter(key_func=get_client_ip, config_filename=config_file)
 
-limiter = get_limiter() 
+limiter = get_limiter()
