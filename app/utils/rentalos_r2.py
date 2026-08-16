@@ -18,20 +18,32 @@ class RentalOSBlobUpload:
 
 CONTENT_TYPE_EXTENSIONS = {
     "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/pjpeg": "jpg",
     "image/png": "png",
     "image/webp": "webp",
     "application/pdf": "pdf",
 }
 
 
+def normalize_content_type(content_type: str | None) -> str:
+    if not content_type:
+        return "application/octet-stream"
+    ct = content_type.lower().split(";")[0].strip()
+    if ct in {"image/jpg", "image/pjpeg"}:
+        return "image/jpeg"
+    return ct
+
+
 def _content_matches_type(content: bytes, content_type: str) -> bool:
-    if content_type == "image/jpeg":
-        return content.startswith(b"\xff\xd8\xff")
-    if content_type == "image/png":
+    ct = normalize_content_type(content_type)
+    if ct == "image/jpeg":
+        return content.startswith(b"\xff\xd8")
+    if ct == "image/png":
         return content.startswith(b"\x89PNG\r\n\x1a\n")
-    if content_type == "image/webp":
+    if ct == "image/webp":
         return len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"
-    if content_type == "application/pdf":
+    if ct == "application/pdf":
         return content.startswith(b"%PDF-")
     return False
 
@@ -63,7 +75,9 @@ def _create_r2_client():
 
 
 def validate_rentalos_upload(file: UploadFile, allowed_content_types: set[str], max_size_bytes: int) -> bytes:
-    if file.content_type not in allowed_content_types:
+    normalized_ct = normalize_content_type(file.content_type)
+    normalized_allowed = {normalize_content_type(ac) for ac in allowed_content_types}
+    if normalized_ct not in normalized_allowed:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Unsupported file type: {file.content_type}",
@@ -88,7 +102,7 @@ def validate_rentalos_upload(file: UploadFile, allowed_content_types: set[str], 
             detail="Uploaded file is empty.",
         )
 
-    if not _content_matches_type(data, file.content_type):
+    if not _content_matches_type(data, normalized_ct):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded file content does not match the declared file type.",
@@ -98,7 +112,8 @@ def validate_rentalos_upload(file: UploadFile, allowed_content_types: set[str], 
 
 
 def build_rentalos_blob_name(shop_id: int, booking_id: int, folder: str, content_type: str) -> str:
-    extension = CONTENT_TYPE_EXTENSIONS.get(content_type)
+    normalized_ct = normalize_content_type(content_type)
+    extension = CONTENT_TYPE_EXTENSIONS.get(normalized_ct)
     if not extension:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

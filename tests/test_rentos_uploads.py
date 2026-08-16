@@ -170,3 +170,52 @@ def test_r2_presigned_url_fails_closed(monkeypatch):
 
     assert exc.value.status_code == 500
     assert "download link" in exc.value.detail.lower()
+
+
+@patch("app.api.v1.rentalos.documents.generate_rentalos_presigned_url")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
+def test_upload_booking_document_normalizes_image_jpg(
+    mock_upload,
+    mock_generate_url,
+    client: TestClient,
+    rental_booking,
+    verified_owner,
+    auth_headers,
+):
+    mock_generate_url.return_value = "https://signed.example/doc.jpg"
+    mock_upload.return_value = RentalOSBlobUpload(blob_name="mock", blob_url="https://signed.example/doc.jpg")
+    headers = auth_headers(verified_owner)
+
+    response = client.post(
+        f"/api/v1/rentalos/bookings/{rental_booking.id}/documents",
+        headers=headers,
+        data={"document_type": "driving_license"},
+        files={"file": ("photo.jpg", JPEG_BYTES, "image/jpg")}
+    )
+
+    assert response.status_code == 201
+    assert response.json()["content_type"] == "image/jpeg"
+
+
+@patch("app.api.v1.rentalos.documents.generate_rentalos_presigned_url")
+@patch("app.api.v1.rentalos.documents.upload_rentalos_blob")
+def test_upload_handover_photo_supports_plural_route(
+    mock_upload,
+    mock_generate_url,
+    client: TestClient,
+    rental_booking,
+    verified_owner,
+    auth_headers,
+):
+    mock_generate_url.return_value = "https://signed.example/photo.jpg"
+    mock_upload.return_value = RentalOSBlobUpload(blob_name="mock", blob_url="https://signed.example/photo.jpg")
+    headers = auth_headers(verified_owner)
+
+    response = client.post(
+        f"/api/v1/rentalos/bookings/{rental_booking.id}/handover-photos",
+        headers=headers,
+        files={"file": ("photo.jpg", JPEG_BYTES, "image/jpeg")}
+    )
+
+    assert response.status_code == 201
+

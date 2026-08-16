@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.orm import Session
 from app.api.v1.oauth2 import get_current_user
 from app.db.database import get_db
-from app.db.models import RentalBookingDocument, RentalHandoverPhoto, User
+from app.db.models import RentalBooking, RentalBookingDocument, RentalHandoverPhoto, User
 from app.schemas.rentalos import RentalBookingDocumentResponse, RentalHandoverPhotoResponse
 from app.utils.rentalos_r2 import (
     build_rentalos_blob_name,
     upload_rentalos_blob,
     validate_rentalos_upload,
     generate_rentalos_presigned_url,
+    normalize_content_type,
 )
 from .utils import (
     get_accessible_rental_booking,
@@ -42,16 +43,17 @@ def upload_rental_booking_document(
             detail="document_type must be driving_license or id_proof.",
         )
 
+    normalized_ct = normalize_content_type(file.content_type)
     content = validate_rentalos_upload(file, DOCUMENT_CONTENT_TYPES, _max_rentalos_upload_bytes())
-    blob_name = build_rentalos_blob_name(booking.shop_id, booking.id, "documents", file.content_type)
-    upload = upload_rentalos_blob(blob_name, content, file.content_type)
+    blob_name = build_rentalos_blob_name(booking.shop_id, booking.id, "documents", normalized_ct)
+    upload = upload_rentalos_blob(blob_name, content, normalized_ct)
 
     db_document = RentalBookingDocument(
         booking_id=booking.id,
         document_type=document_type,
         file_url=upload.blob_url,
         file_name=file.filename,
-        content_type=file.content_type,
+        content_type=normalized_ct,
         uploaded_by_user_id=current_user.id,
     )
     db.add(db_document)
@@ -71,13 +73,21 @@ def list_rental_booking_documents(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List uploaded DL/ID proof metadata for an accessible RentalOS booking."""
+    """List uploaded DL/ID proof metadata for an accessible RentalOS booking and its customer."""
     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     booking = get_accessible_rental_booking(db, booking_id, current_user)
+
     docs = (
         db.query(RentalBookingDocument)
-        .filter(RentalBookingDocument.booking_id == booking.id)
-        .order_by(RentalBookingDocument.created_at.desc())
+        .join(RentalBooking, RentalBookingDocument.booking_id == RentalBooking.id)
+        .filter(
+            RentalBooking.customer_id == booking.customer_id,
+            RentalBooking.shop_id == booking.shop_id,
+        )
+        .order_by(
+            (RentalBookingDocument.booking_id == booking.id).desc(),
+            RentalBookingDocument.created_at.desc(),
+        )
         .all()
     )
     responses = []
@@ -91,6 +101,11 @@ def list_rental_booking_documents(
 
 @router.post(
     "/bookings/{booking_id}/handover-photo",
+    response_model=RentalHandoverPhotoResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.post(
+    "/bookings/{booking_id}/handover-photos",
     response_model=RentalHandoverPhotoResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -119,9 +134,10 @@ def upload_rental_handover_photo(
             detail="longitude must be between -180 and 180.",
         )
 
+    normalized_ct = normalize_content_type(file.content_type)
     content = validate_rentalos_upload(file, HANDOVER_PHOTO_CONTENT_TYPES, _max_rentalos_upload_bytes())
-    blob_name = build_rentalos_blob_name(booking.shop_id, booking.id, "handover", file.content_type)
-    upload = upload_rentalos_blob(blob_name, content, file.content_type)
+    blob_name = build_rentalos_blob_name(booking.shop_id, booking.id, "handover", normalized_ct)
+    upload = upload_rentalos_blob(blob_name, content, normalized_ct)
 
     db_photo = RentalHandoverPhoto(
         booking_id=booking.id,
